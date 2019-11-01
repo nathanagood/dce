@@ -36,8 +36,8 @@ func main() {
 		db: dynDB,
 		tables: map[string]string{
 			"RedboxAccountProd": "Accounts",
-			"RedboxLeaseProd": "Leases",
-			"UsageCache": "Usage",
+			"RedboxLeaseProd":   "Leases",
+			"UsageCache":        "Usage",
 		},
 	})
 	if err != nil {
@@ -46,7 +46,7 @@ func main() {
 }
 
 type migrateInput struct {
-	db *dynamodb.DynamoDB
+	db     *dynamodb.DynamoDB
 	tables map[string]string
 }
 
@@ -61,13 +61,12 @@ func migrate(input *migrateInput) error {
 			return errors.Wrapf(err, "Scan failed for %s", srcTableName)
 		}
 
-
 		// Create records in the new table
 		var deferredErrors []error
 		for i, item := range scanRes.Items {
 			_, err = input.db.PutItem(&dynamodb.PutItemInput{
 				TableName: &dstTableName,
-				Item: item,
+				Item:      item,
 			})
 			if err != nil {
 				deferredErrors = append(deferredErrors, err)
@@ -75,10 +74,10 @@ func migrate(input *migrateInput) error {
 Failed to put item %d/%d to %s
 Error: %s
 Item: %v
-`, i + 1, len(scanRes.Items), dstTableName, err, item)
+`, i+1, len(scanRes.Items), dstTableName, err, item)
 				continue
 			}
-			log.Printf("Migrated record %d/%d from %s to %s", i + 1, len(scanRes.Items), srcTableName, dstTableName)
+			log.Printf("Migrated record %d/%d from %s to %s", i+1, len(scanRes.Items), srcTableName, dstTableName)
 		}
 
 		// Handle deferred errors

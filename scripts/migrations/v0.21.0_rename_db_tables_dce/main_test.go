@@ -71,12 +71,12 @@ func TestMigrateV0210(t *testing.T) {
 				Item:      item,
 			})
 			require.Nil(t, err)
-			log.Printf("Put fixture record %d/%d to %s", i + 1, len(records), srcTableName)
+			log.Printf("Put fixture record %d/%d to %s", i+1, len(records), srcTableName)
 		}
 
 		// Run migration
 		err := migrate(&migrateInput{
-			db:     dynDB,
+			db: dynDB,
 			tables: map[string]string{
 				srcTableName: dstTableName,
 			},
@@ -85,7 +85,7 @@ func TestMigrateV0210(t *testing.T) {
 
 		// Dest table should have all the records from our source able
 		dstScan, err := dynDB.Scan(&dynamodb.ScanInput{
-			TableName: &dstTableName,
+			TableName:      &dstTableName,
 			ConsistentRead: aws.Bool(true),
 		})
 		require.Nil(t, err)
@@ -96,7 +96,7 @@ func TestMigrateV0210(t *testing.T) {
 		// Source table should still have all the same records
 		// (should be non-destructive)
 		srcScan, err := dynDB.Scan(&dynamodb.ScanInput{
-			TableName: &srcTableName,
+			TableName:      &srcTableName,
 			ConsistentRead: aws.Bool(true),
 		})
 		require.Nil(t, err)
@@ -144,7 +144,7 @@ func truncateAccountTable(t *testing.T, dynDB *dynamodb.DynamoDB, accountTableNa
 		batch = append(batch, req)
 
 		// Batch API only allows 25 at a time
-		if i % 25 == 0 || i == len(deleteRequests) - 1 {
+		if i%25 == 0 || i == len(deleteRequests)-1 {
 			_, err = dynDB.BatchWriteItem(
 				&dynamodb.BatchWriteItemInput{
 					RequestItems: map[string][]*dynamodb.WriteRequest{
@@ -154,8 +154,7 @@ func truncateAccountTable(t *testing.T, dynDB *dynamodb.DynamoDB, accountTableNa
 			)
 			require.Nil(t, err)
 			batch = []*dynamodb.WriteRequest{}
-			log.Printf("Deleted records %d - %d / %d from %s", i - 24, i + 1, len(deleteRequests), accountTableName)
+			log.Printf("Deleted records %d - %d / %d from %s", i-24, i+1, len(deleteRequests), accountTableName)
 		}
 	}
 }
-
