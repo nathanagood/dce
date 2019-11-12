@@ -4,22 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/iam"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/sts"
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
 	"github.com/Optum/dce/pkg/api/response"
 	"github.com/Optum/dce/pkg/common"
+	"github.com/Optum/dce/pkg/data"
 	"github.com/Optum/dce/pkg/rolemanager"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/aws/aws-sdk-go/service/sts"
 
 	"github.com/Optum/dce/pkg/api"
 	"github.com/Optum/dce/pkg/db"
@@ -50,6 +53,8 @@ var (
 	StorageSvc common.Storager
 	// Config - The configuration client
 	Config common.DefaultEnvConfig
+	// DataSvc Service
+	DataSvc data.Account
 )
 
 var (
@@ -141,6 +146,18 @@ func initConfig() {
 	accountCreatedTopicArn = Config.GetEnvVar("ACCOUNT_CREATED_TOPIC_ARN", "DefaultAccountCreatedTopicArn")
 	resetQueueURL = Config.GetEnvVar("RESET_SQS_URL", "DefaultResetSQSUrl")
 	allowedRegions = strings.Split(Config.GetEnvVar("ALLOWED_REGIONS", "us-east-1"), ",")
+	awsSession, err := session.NewSession()
+	if err != nil {
+		failf("Failure creating session")
+	}
+	dao := dynamodb.New(
+		awsSession,
+		aws.NewConfig().WithRegion(Config.GetEnvVar("AWS_CURRENT_REGION", "us-east-1")),
+	)
+	DataSvc = data.Account{
+		AwsDynamoDB: dao,
+		TableName:   Config.GetEnvVar("ACCOUNT_DB", ""),
+	}
 }
 
 // Handler - Handle the lambda function
@@ -152,7 +169,6 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 
 func main() {
 	// Setup services
-	Dao = newDBer()
 	AWSSession = newAWSSession()
 	Queue = common.SQSQueue{Client: sqs.New(AWSSession)}
 	SnsSvc = &common.SNS{Client: sns.New(AWSSession)}
@@ -167,16 +183,6 @@ func main() {
 
 	// Send Lambda requests to the router
 	lambda.Start(Handler)
-}
-
-func newDBer() db.DBer {
-	dao, err := db.NewFromEnv()
-	if err != nil {
-		errorMessage := fmt.Sprintf("Failed to initialize database: %s", err)
-		log.Fatal(errorMessage)
-	}
-
-	return dao
 }
 
 func newAWSSession() *session.Session {

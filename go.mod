@@ -5,7 +5,7 @@ go 1.12x
 require (
 	github.com/avast/retry-go v2.3.0+incompatible
 	github.com/aws/aws-lambda-go v1.11.1
-	github.com/aws/aws-sdk-go v1.25.36
+	github.com/aws/aws-sdk-go v1.25.37
 	github.com/awslabs/aws-lambda-go-api-proxy v0.5.0
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/google/uuid v1.1.1

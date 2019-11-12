@@ -1,13 +1,12 @@
 package db
 
 import (
-	"errors"
 	"fmt"
-	errors2 "github.com/pkg/errors"
-	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	errors2 "github.com/pkg/errors"
 
 	guuid "github.com/google/uuid"
 
@@ -44,24 +43,17 @@ type DB struct {
 // DynamoDB. This is useful if we want to mock the DB service.
 //go:generate mockery -name DBer
 type DBer interface {
-	GetAccount(accountID string) (*Account, error)
-	GetReadyAccount() (*Account, error)
-	GetAccounts() ([]*Account, error)
 	GetLeases(input GetLeasesInput) (GetLeasesOutput, error)
 	GetLeaseByID(leaseID string) (*Lease, error)
-	FindAccountsByStatus(status AccountStatus) ([]*Account, error)
-	FindAccountsByPrincipalID(principalID string) ([]*Account, error)
 	PutAccount(account Account) error
 	UpdateAccount(account Account, fieldsToUpdate []string) (*Account, error)
 	DeleteAccount(accountID string) (*Account, error)
 	PutLease(lease Lease) (*Lease, error)
 	UpsertLease(lease Lease) (*Lease, error)
-	TransitionAccountStatus(accountID string, prevStatus AccountStatus, nextStatus AccountStatus) (*Account, error)
 	TransitionLeaseStatus(accountID string, principalID string, prevStatus LeaseStatus, nextStatus LeaseStatus, leaseStatusReason LeaseStatusReason) (*Lease, error)
 	FindLeasesByAccount(accountID string) ([]*Lease, error)
 	FindLeasesByPrincipal(principalID string) ([]*Lease, error)
 	FindLeasesByStatus(status LeaseStatus) ([]*Lease, error)
-	UpdateMetadata(accountID string, metadata map[string]interface{}) error
 	UpdateAccountPrincipalPolicyHash(accountID string, prevHash string, nextHash string) (*Account, error)
 	OrphanAccount(accountID string) (*Account, error)
 }
@@ -114,73 +106,6 @@ func (db *DB) GetAccounts() ([]*Account, error) {
 		}
 		accounts = append(accounts, n)
 	}
-	return accounts, nil
-}
-
-// GetReadyAccount returns an available account record with a
-// corresponding status of 'Ready'
-func (db *DB) GetReadyAccount() (*Account, error) {
-	accounts, err := db.FindAccountsByStatus(Ready)
-	if len(accounts) < 1 {
-		return nil, err
-	}
-	return accounts[0], err
-}
-
-func (db *DB) FindAccountsByStatus(status AccountStatus) ([]*Account, error) {
-	res, err := db.Client.Query(&dynamodb.QueryInput{
-		TableName: aws.String(db.AccountTableName),
-		IndexName: aws.String("AccountStatus"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":status": {
-				S: aws.String(string(status)),
-			},
-		},
-		KeyConditionExpression: aws.String("AccountStatus = :status"),
-	})
-
-	accounts := []*Account{}
-
-	if err != nil {
-		return accounts, err
-	}
-
-	for _, item := range res.Items {
-		acct, err := unmarshalAccount(item)
-		if err != nil {
-			return accounts, err
-		}
-		accounts = append(accounts, acct)
-	}
-
-	return accounts, nil
-}
-func (db *DB) FindAccountsByPrincipalID(principalID string) ([]*Account, error) {
-	res, err := db.Client.Query(&dynamodb.QueryInput{
-		TableName: aws.String(db.AccountTableName),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":pid": {
-				S: aws.String(string(principalID)),
-			},
-		},
-		KeyConditionExpression: aws.String("PrincipalId = :pid"),
-		ConsistentRead:         aws.Bool(db.ConsistentRead),
-	})
-
-	accounts := []*Account{}
-
-	if err != nil {
-		return accounts, err
-	}
-
-	for _, item := range res.Items {
-		acct, err := unmarshalAccount(item)
-		if err != nil {
-			return accounts, err
-		}
-		accounts = append(accounts, acct)
-	}
-
 	return accounts, nil
 }
 
@@ -356,7 +281,7 @@ func (db *DB) PutAccount(account Account) error {
 func (db *DB) UpdateAccount(account Account, fieldsToUpdate []string) (*Account, error) {
 	// Verify the account has an ID
 	if account.ID == "" {
-		return nil, errors.New("unable to update account: account has no ID")
+		return nil, errors2.New("unable to update account: account has no ID")
 	}
 
 	// Update timestamps
@@ -616,107 +541,6 @@ func (db *DB) TransitionAccountStatus(accountID string, prevStatus AccountStatus
 	return unmarshalAccount(result.Attributes)
 }
 
-// UpdateAccountPrincipalPolicyHash updates hash representing the
-// current version of the Principal IAM Policy applied to the account
-func (db *DB) UpdateAccountPrincipalPolicyHash(accountID string, prevHash string, nextHash string) (*Account, error) {
-
-	conditionExpression := expression.ConditionBuilder{}
-	if prevHash != "" {
-		log.Printf("Using Condition where PrincipalPolicyHash equals '%s'", prevHash)
-		conditionExpression = expression.Name("PrincipalPolicyHash").Equal(expression.Value(prevHash))
-	} else {
-		log.Printf("Using Condition where PrincipalPolicyHash does not exists")
-		conditionExpression = expression.AttributeNotExists(expression.Name("PrincipalPolicyHash"))
-	}
-	updateExpression, _ := expression.NewBuilder().WithCondition(
-		conditionExpression,
-	).WithUpdate(
-		expression.Set(
-			expression.Name("PrincipalPolicyHash"),
-			expression.Value(nextHash),
-		).Set(
-			expression.Name("LastModifiedOn"),
-			expression.Value(time.Now().Unix()),
-		),
-	).Build()
-
-	result, err := db.Client.UpdateItem(
-		&dynamodb.UpdateItemInput{
-			// Query in Lease Table
-			TableName: aws.String(db.AccountTableName),
-			// Find Account for the requested accountId
-			Key: map[string]*dynamodb.AttributeValue{
-				"Id": {
-					S: aws.String(accountID),
-				},
-			},
-			ExpressionAttributeNames:  updateExpression.Names(),
-			ExpressionAttributeValues: updateExpression.Values(),
-			// Set PrincipalPolicyHash=nextHash
-			UpdateExpression: updateExpression.Update(),
-			// Only update records where the previousHash matches
-			ConditionExpression: updateExpression.Condition(),
-			// Return the updated record
-			ReturnValues: aws.String("ALL_NEW"),
-		},
-	)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			if aerr.Code() == "ConditionalCheckFailedException" {
-				return nil, &StatusTransitionError{
-					fmt.Sprintf(
-						"unable to update Principal Policy hash from \"%v\" to \"%v\" "+
-							"for account %v: no account exists with PrincipalPolicyHash=\"%v\"",
-						prevHash,
-						nextHash,
-						accountID,
-						prevHash,
-					),
-				}
-			}
-			return nil, err
-		}
-		return nil, err
-	}
-
-	return unmarshalAccount(result.Attributes)
-}
-
-// DeleteAccount finds a given account and deletes it if it is not of status `Leased`. Returns the account.
-func (db *DB) DeleteAccount(accountID string) (*Account, error) {
-	account, err := db.GetAccount(accountID)
-
-	if err != nil {
-		errorMessage := fmt.Sprintf("Failed to query account \"%s\": %s.", accountID, err)
-		log.Print(errorMessage)
-		return nil, errors.New(errorMessage)
-	}
-
-	if account == nil {
-		errorMessage := fmt.Sprintf("No account found with ID \"%s\".", accountID)
-		log.Print(errorMessage)
-		return nil, &AccountNotFoundError{err: errorMessage}
-	}
-
-	if account.AccountStatus == Leased {
-		errorMessage := fmt.Sprintf("Unable to delete account \"%s\": account is leased.", accountID)
-		log.Print(errorMessage)
-		return account, &AccountLeasedError{err: errorMessage}
-	}
-
-	input := &dynamodb.DeleteItemInput{
-		TableName: &db.AccountTableName,
-		Key: map[string]*dynamodb.AttributeValue{
-			"Id": {
-				S: aws.String(accountID),
-			},
-		},
-	}
-
-	_, err = db.Client.DeleteItem(input)
-	return account, err
-}
-
 // GetLeasesInput contains the filtering criteria for the GetLeases scan.
 type GetLeasesInput struct {
 	StartKeys   map[string]string
@@ -804,42 +628,6 @@ func (db *DB) GetLeases(input GetLeasesInput) (GetLeasesOutput, error) {
 		Results:  results,
 		NextKeys: nextKey,
 	}, nil
-}
-
-// UpdateMetadata updates the metadata field of an account, overwriting the old value completely with a new one
-func (db *DB) UpdateMetadata(accountID string, metadata map[string]interface{}) error {
-	serialized, err := dynamodbattribute.Marshal(metadata)
-
-	if err != nil {
-		log.Printf("Failed to marshall metadata map for updating account %s: %s", accountID, err)
-		return err
-	}
-
-	_, err = db.Client.UpdateItem(
-		&dynamodb.UpdateItemInput{
-			TableName: aws.String(db.AccountTableName),
-			Key: map[string]*dynamodb.AttributeValue{
-				"Id": {
-					S: aws.String(accountID),
-				},
-			},
-			UpdateExpression: aws.String("set Metadata=:metadata, " +
-				"LastModifiedOn=:lastModifiedOn"),
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":metadata": serialized,
-				":lastModifiedOn": {
-					N: aws.String(strconv.FormatInt(time.Now().Unix(), 10)),
-				},
-			},
-		},
-	)
-
-	if err != nil {
-		log.Printf("Failed to execute metadata update for account %s: %s", accountID, err)
-		return err
-	}
-
-	return nil
 }
 
 // OrphanAccount puts account in Oprhaned status and inactivates any active leases
@@ -955,7 +743,7 @@ func buildUpdateExpression(input *buildUpdateExpressInput) (*expression.Expressi
 	shouldInclude := len(input.includeFields) > 0
 
 	if shouldExclude && shouldInclude {
-		return nil, errors.New("unable to build DynDB update expression: " +
+		return nil, errors2.New("unable to build DynDB update expression: " +
 			"request may specify includeFields or excludeFields, but not both")
 	}
 

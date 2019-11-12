@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Optum/dce/pkg/account"
 	"github.com/Optum/dce/pkg/api/response"
 	"github.com/Optum/dce/pkg/common"
 	"github.com/Optum/dce/pkg/db"
@@ -46,7 +47,7 @@ func CreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if the account already exists
-	existingAccount, err := Dao.GetAccount(request.ID)
+	existingAccount, err := account.GetAccountByID(request.ID, DataSvc)
 	if err != nil {
 		log.Printf("Failed to add account %s to pool: %s",
 			request.ID, err.Error())

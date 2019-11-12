@@ -8,14 +8,14 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/Optum/dce/pkg/account"
 	"github.com/Optum/dce/pkg/api/response"
-	"github.com/Optum/dce/pkg/db"
 )
 
 // GetAllAccounts - Returns all the accounts.
 func GetAllAccounts(w http.ResponseWriter, r *http.Request) {
 	// Fetch the accounts.
-	accounts, err := Dao.GetAccounts()
+	accounts, err := Dao.GetAccounts(accountID, DataSvc)
 
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed to query database: %s", err)
@@ -38,7 +38,7 @@ func GetAllAccounts(w http.ResponseWriter, r *http.Request) {
 func GetAccountByID(w http.ResponseWriter, r *http.Request) {
 
 	accountID := mux.Vars(r)["accountId"]
-	account, err := Dao.GetAccount(accountID)
+	account, err := account.GetAccountByID(accountID, DataSvc)
 
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed List on Account Lease %s", accountID)
@@ -52,18 +52,16 @@ func GetAccountByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	acctRes := response.AccountResponse(*account)
-
-	json.NewEncoder(w).Encode(acctRes)
+	json.NewEncoder(w).Encode(account)
 }
 
 // GetAccountByStatus - Returns the accounts by status
 func GetAccountByStatus(w http.ResponseWriter, r *http.Request) {
 	// Fetch the accounts.
 	accountStatus := r.FormValue("accountStatus")
-	status, err := db.ParseAccountStatus(accountStatus)
+	status := account.Status(accountStatus)
 
-	accounts, err := Dao.FindAccountsByStatus(status)
+	accounts, err := account.GetAccountsByStatus(status, DataSvc)
 
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed to query database: %s", err)
@@ -76,14 +74,6 @@ func GetAccountByStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Serialize them for the JSON response.
-	accountResponses := []*response.AccountResponse{}
-
-	for _, a := range accounts {
-		acctRes := response.AccountResponse(*a)
-		accountResponses = append(accountResponses, &acctRes)
-	}
-
-	json.NewEncoder(w).Encode(accountResponses)
+	json.NewEncoder(w).Encode(accounts)
 
 }
