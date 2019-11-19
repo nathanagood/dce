@@ -20,7 +20,7 @@ steps:
   - bash: |
       git status
       git remote -v
-      git branch
+      git branch -a
       pwd
       git log -n 3
       git rev-parse HEAD
