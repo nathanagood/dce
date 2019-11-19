@@ -18,5 +18,9 @@ pr:
 
 steps:
   - bash: |
-      git rev-parse --abbrev-ref HEAD
+      git status
+      git remote -v
+      pwd
+      git log -n 3
+      git rev-parse HEAD
     displayName: "Configure AWS Namespace"
