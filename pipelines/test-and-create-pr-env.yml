@@ -24,4 +24,5 @@ steps:
       pwd
       git log -n 3
       git rev-parse HEAD
+      git show -s --pretty=%d HEAD
     displayName: "Configure AWS Namespace"
