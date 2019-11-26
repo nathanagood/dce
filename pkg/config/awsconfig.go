@@ -21,74 +21,89 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+
+	"github.com/Optum/dce/pkg/db"
+	"github.com/Optum/dce/pkg/rolemanager"
 )
 
 // AWSSessionKey is the key for the configuration for the AWS session
 const AWSSessionKey = "AWSSession"
 
-// AWSConfigurationError is returned when an AWS service cannot be properly configured.
-type AWSConfigurationError error
+// ServiceConfigurationError is returned when an AWS service cannot be properly configured.
+type ServiceConfigurationError error
 
 // createrFunc internal functions for handling the creation of the services
 type createrFunc func(config *ConfigurationBuilder) error
 
-// AWSServiceBuilder is the default implementation of the `AWSServiceBuilder`
-type AWSServiceBuilder struct {
+// ServiceBuilder is the default implementation of the `ServiceBuilder`
+type ServiceBuilder struct {
 	handlers   []createrFunc
 	awsSession *session.Session
 	Config     *ConfigurationBuilder
 }
 
-// WithSTS tells the builder to add an AWS STS service to the `DefaultConfigurater`
-func (bldr *AWSServiceBuilder) WithSTS() *AWSServiceBuilder {
+// WithSTS tells the builder to add an AWS STS service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithSTS() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createSTS)
 	return bldr
 }
 
-// WithSNS tells the builder to add an AWS SNS service to the `DefaultConfigurater`
-func (bldr *AWSServiceBuilder) WithSNS() *AWSServiceBuilder {
+// WithSNS tells the builder to add an AWS SNS service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithSNS() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createSNS)
 	return bldr
 }
 
-// WithSQS tells the builder to add an AWS SQS service to the `DefaultConfigurater`
-func (bldr *AWSServiceBuilder) WithSQS() *AWSServiceBuilder {
+// WithSQS tells the builder to add an AWS SQS service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithSQS() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createSQS)
 	return bldr
 }
 
-// WithDynamoDB tells the builder to add an AWS DynamoDB service to the `DefaultConfigurater`
-func (bldr *AWSServiceBuilder) WithDynamoDB() *AWSServiceBuilder {
+// WithDynamoDB tells the builder to add an AWS DynamoDB service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithDynamoDB() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createDynamoDB)
 	return bldr
 }
 
-// WithS3 tells the builder to add an AWS S3 service to the `DefaultConfigurater`
-func (bldr *AWSServiceBuilder) WithS3() *AWSServiceBuilder {
+// WithS3 tells the builder to add an AWS S3 service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithS3() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createS3)
 	return bldr
 }
 
-// WithCognito tells the builder to add an AWS Cognito service to the `DefaultConfigurater`
-func (bldr *AWSServiceBuilder) WithCognito() *AWSServiceBuilder {
+// WithCognito tells the builder to add an AWS Cognito service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithCognito() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createCognito)
 	return bldr
 }
 
-// WithCodeBuild tells the builder to add an AWS CodeBuild service to the `DefaultConfigurater`
-func (bldr *AWSServiceBuilder) WithCodeBuild() *AWSServiceBuilder {
+// WithCodeBuild tells the builder to add an AWS CodeBuild service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithCodeBuild() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createCodeBuild)
 	return bldr
 }
 
+// WithRoleManager tells the builder to add the DCE RoleManager service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithRoleManager() *ServiceBuilder {
+	bldr.handlers = append(bldr.handlers, bldr.createRoleManager)
+	return bldr
+}
+
+// WithDAO tells the builder to add the DCE DAO (DBer) service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithDAO() *ServiceBuilder {
+	bldr.handlers = append(bldr.handlers, bldr.createDAO)
+	return bldr
+}
+
 // Build creates and returns a structue with AWS services
-func (bldr *AWSServiceBuilder) Build() (*ConfigurationBuilder, error) {
+func (bldr *ServiceBuilder) Build() (*ConfigurationBuilder, error) {
 
 	err := bldr.Config.Build()
 	if err != nil {
 		// We failed to build the configuration, so honestly there is no
 		// point in continuating...
-		return bldr.Config, AWSConfigurationError(err)
+		return bldr.Config, ServiceConfigurationError(err)
 	}
 
 	// Create session is done first, and explicitly, because everything else
@@ -97,14 +112,14 @@ func (bldr *AWSServiceBuilder) Build() (*ConfigurationBuilder, error) {
 
 	if err != nil {
 		log.Printf("Could not create session: %s", err.Error())
-		return bldr.Config, AWSConfigurationError(err)
+		return bldr.Config, ServiceConfigurationError(err)
 	}
 
 	for _, f := range bldr.handlers {
 		err := f(bldr.Config)
 		if err != nil {
 			log.Printf("Error while trying to execute handler: %s", runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name())
-			return bldr.Config, AWSConfigurationError(err)
+			return bldr.Config, ServiceConfigurationError(err)
 		}
 	}
 
@@ -112,7 +127,7 @@ func (bldr *AWSServiceBuilder) Build() (*ConfigurationBuilder, error) {
 	return bldr.Config, nil
 }
 
-func (bldr *AWSServiceBuilder) createSession(config *ConfigurationBuilder) error {
+func (bldr *ServiceBuilder) createSession(config *ConfigurationBuilder) error {
 	var err error
 	region, err := bldr.Config.GetStringVal("AWS_CURRENT_REGION")
 	if err == nil {
@@ -129,51 +144,86 @@ func (bldr *AWSServiceBuilder) createSession(config *ConfigurationBuilder) error
 	return err
 }
 
-func (bldr *AWSServiceBuilder) createSTS(config *ConfigurationBuilder) error {
+func (bldr *ServiceBuilder) createSTS(config *ConfigurationBuilder) error {
 	var stsSvc stsiface.STSAPI
 	stsSvc = sts.New(bldr.awsSession)
 	config.WithService(stsSvc)
 	return nil
 }
 
-func (bldr *AWSServiceBuilder) createSNS(config *ConfigurationBuilder) error {
+func (bldr *ServiceBuilder) createSNS(config *ConfigurationBuilder) error {
 	var snsSvc snsiface.SNSAPI
 	snsSvc = sns.New(bldr.awsSession)
 	config.WithService(snsSvc)
 	return nil
 }
 
-func (bldr *AWSServiceBuilder) createSQS(config *ConfigurationBuilder) error {
+func (bldr *ServiceBuilder) createSQS(config *ConfigurationBuilder) error {
 	var sqsSvc sqsiface.SQSAPI
 	sqsSvc = sqs.New(bldr.awsSession)
 	config.WithService(sqsSvc)
 	return nil
 }
 
-func (bldr *AWSServiceBuilder) createDynamoDB(config *ConfigurationBuilder) error {
+func (bldr *ServiceBuilder) createDynamoDB(config *ConfigurationBuilder) error {
 	var dynamodbSvc dynamodbiface.DynamoDBAPI
 	dynamodbSvc = dynamodb.New(bldr.awsSession)
 	config.WithService(dynamodbSvc)
 	return nil
 }
 
-func (bldr *AWSServiceBuilder) createS3(config *ConfigurationBuilder) error {
+func (bldr *ServiceBuilder) createS3(config *ConfigurationBuilder) error {
 	var s3Svc s3iface.S3API
 	s3Svc = s3.New(bldr.awsSession)
 	config.WithService(s3Svc)
 	return nil
 }
 
-func (bldr *AWSServiceBuilder) createCognito(config *ConfigurationBuilder) error {
+func (bldr *ServiceBuilder) createCognito(config *ConfigurationBuilder) error {
 	var cognitoSvc cognitoidentityprovideriface.CognitoIdentityProviderAPI
 	cognitoSvc = cognitoidentityprovider.New(bldr.awsSession)
 	config.WithService(cognitoSvc)
 	return nil
 }
 
-func (bldr *AWSServiceBuilder) createCodeBuild(config *ConfigurationBuilder) error {
+func (bldr *ServiceBuilder) createCodeBuild(config *ConfigurationBuilder) error {
 	var codeBuildSvc codebuildiface.CodeBuildAPI
 	codeBuildSvc = codebuild.New(bldr.awsSession)
 	config.WithService(codeBuildSvc)
+	return nil
+}
+
+func (bldr *ServiceBuilder) createRoleManager(config *ConfigurationBuilder) error {
+	var rmSvc rolemanager.RoleManager
+	rmSvc = &rolemanager.IAMRoleManager{}
+	config.WithService(rmSvc)
+	return nil
+}
+
+func (bldr *ServiceBuilder) createDAO(config *ConfigurationBuilder) error {
+	var daoSvc db.DBer
+
+	var dynamodbSvc dynamodbiface.DynamoDBAPI
+	err := bldr.Config.GetService(&dynamodbSvc)
+
+	if err != nil {
+		log.Println("Could not find DynamoDB iface in services")
+		return err
+	}
+
+	daoSvcImpl := db.DB{}
+
+	err = bldr.Config.Unmarshal(daoSvcImpl)
+
+	if err != nil {
+		log.Printf("Error while trying to create DB from env: %s", err.Error())
+		return err
+	}
+
+	daoSvcImpl.Client = dynamodbSvc
+
+	daoSvc = &daoSvcImpl
+
+	config.WithService(daoSvc)
 	return nil
 }

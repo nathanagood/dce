@@ -1,8 +1,6 @@
 package common
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
@@ -51,15 +49,15 @@ func (queue SQSQueue) DeleteMessage(input *sqs.DeleteMessageInput) (
 // NewFromEnv creates an SQS instance configured from environment variables.
 // Requires env vars for:
 // - AWS_CURRENT_REGION
-func (queue SQSQueue) NewFromEnv() error {
-	awsSession, err := session.NewSession(&aws.Config{
-		Region: aws.String(RequireEnv("AWS_CURRENT_REGION"))})
-	if err != nil {
-		return err
-	}
-	queue.Client = sqs.New(awsSession)
-	if err != nil {
-		return err
-	}
-	return nil
-}
+// func (queue SQSQueue) NewFromEnv() error {
+// 	awsSession, err := session.NewSession(&aws.Config{
+// 		Region: aws.String(RequireEnv("AWS_CURRENT_REGION"))})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	queue.Client = sqs.New(awsSession)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }

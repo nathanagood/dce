@@ -6,9 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Optum/dce/pkg/common"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 )
@@ -144,17 +142,18 @@ Requires env vars for:
 - USAGE_CACHE_DB
 */
 func NewFromEnv() (*DB, error) {
-	awsSession, err := session.NewSession()
-	if err != nil {
-		return nil, err
-	}
-	return New(
-		dynamodb.New(
-			awsSession,
-			aws.NewConfig().WithRegion(common.RequireEnv("AWS_CURRENT_REGION")),
-		),
-		common.RequireEnv("USAGE_CACHE_DB"),
-	), nil
+	// awsSession, err := session.NewSession()
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return New(
+	// 	dynamodb.New(
+	// 		awsSession,
+	// 		aws.NewConfig().WithRegion(common.RequireEnv("AWS_CURRENT_REGION")),
+	// 	),
+	// 	common.RequireEnv("USAGE_CACHE_DB"),
+	// ), nil
+	return nil, nil
 }
 
 func unmarshalUsageRecord(dbResult map[string]*dynamodb.AttributeValue) (*Usage, error) {

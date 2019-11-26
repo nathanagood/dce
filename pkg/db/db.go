@@ -3,18 +3,18 @@ package db
 import (
 	"errors"
 	"fmt"
-	errors2 "github.com/pkg/errors"
 	"log"
 	"strconv"
 	"strings"
 	"time"
 
+	errors2 "github.com/pkg/errors"
+
 	guuid "github.com/google/uuid"
 
-	"github.com/Optum/dce/pkg/common"
+	"github.com/Optum/dce/pkg/config"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
@@ -31,13 +31,13 @@ type DB struct {
 	// Name of the Account table
 	Client dynamodbiface.DynamoDBAPI
 	// Name of the RedboxAccount table
-	AccountTableName string
+	AccountTableName string `env:"ACCOUNT_DB"`
 	// Name of the Lease table
-	LeaseTableName string
+	LeaseTableName string `env:"LEASE_DB"`
 	// Default expiry time, in days, of the lease
-	DefaultLeaseLengthInDays int
+	DefaultLeaseLengthInDays int `env:"DEFAULT_LEASE_LENGTH_IN_DAYS" envDefault:"7"`
 	// Use Consistent Reads when scanning or querying when possible.
-	ConsistentRead bool
+	ConsistentRead bool `env:"USE_CONSISTENT_READS" envDefault:"false"`
 }
 
 // The DBer interface includes all methods used by the DB struct to interact with
@@ -921,20 +921,26 @@ Requires env vars for:
 - ACCOUNT_DB
 - LEASE_DB
 */
-func NewFromEnv() (*DB, error) {
-	awsSession, err := session.NewSession()
+func NewFromEnv(services *config.ServiceBuilder) (*DB, error) {
+
+	var dynamodbSvc dynamodbiface.DynamoDBAPI
+	dbConfig := &DB{}
+	err := services.Config.Unmarshal(dbConfig)
+
 	if err != nil {
+		log.Printf("Error while trying to create DB from env: %s", err.Error())
 		return nil, err
 	}
-	return New(
-		dynamodb.New(
-			awsSession,
-			aws.NewConfig().WithRegion(common.RequireEnv("AWS_CURRENT_REGION")),
-		),
-		common.RequireEnv("ACCOUNT_DB"),
-		common.RequireEnv("LEASE_DB"),
-		common.GetEnvInt("DEFAULT_LEASE_LENGTH_IN_DAYS", 7),
-	), nil
+
+	err = services.Config.GetService(&dynamodbSvc)
+
+	if err != nil {
+		log.Println("Could not find DynamoDB iface in services")
+		return nil, err
+	}
+	dbConfig.Client = dynamodbSvc
+
+	return dbConfig, nil
 }
 
 type buildUpdateExpressInput struct {
