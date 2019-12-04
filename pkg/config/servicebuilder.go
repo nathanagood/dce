@@ -38,7 +38,7 @@ type createrFunc func(config *ConfigurationBuilder) error
 // ServiceBuilder is the default implementation of the `ServiceBuilder`
 type ServiceBuilder struct {
 	handlers   []createrFunc
-	awsSession *session.Session
+	AWSSession *session.Session
 	Config     *ConfigurationBuilder
 }
 
@@ -132,63 +132,63 @@ func (bldr *ServiceBuilder) createSession(config *ConfigurationBuilder) error {
 	region, err := bldr.Config.GetStringVal("AWS_CURRENT_REGION")
 	if err == nil {
 		log.Printf("Using AWS region \"%s\" to create session...", region)
-		bldr.awsSession, err = session.NewSession(
+		bldr.AWSSession, err = session.NewSession(
 			&aws.Config{
 				Region: aws.String(region),
 			},
 		)
 	} else {
 		log.Println("Creating AWS session using defaults...")
-		bldr.awsSession, err = session.NewSession()
+		bldr.AWSSession, err = session.NewSession()
 	}
 	return err
 }
 
 func (bldr *ServiceBuilder) createSTS(config *ConfigurationBuilder) error {
 	var stsSvc stsiface.STSAPI
-	stsSvc = sts.New(bldr.awsSession)
+	stsSvc = sts.New(bldr.AWSSession)
 	config.WithService(stsSvc)
 	return nil
 }
 
 func (bldr *ServiceBuilder) createSNS(config *ConfigurationBuilder) error {
 	var snsSvc snsiface.SNSAPI
-	snsSvc = sns.New(bldr.awsSession)
+	snsSvc = sns.New(bldr.AWSSession)
 	config.WithService(snsSvc)
 	return nil
 }
 
 func (bldr *ServiceBuilder) createSQS(config *ConfigurationBuilder) error {
 	var sqsSvc sqsiface.SQSAPI
-	sqsSvc = sqs.New(bldr.awsSession)
+	sqsSvc = sqs.New(bldr.AWSSession)
 	config.WithService(sqsSvc)
 	return nil
 }
 
 func (bldr *ServiceBuilder) createDynamoDB(config *ConfigurationBuilder) error {
 	var dynamodbSvc dynamodbiface.DynamoDBAPI
-	dynamodbSvc = dynamodb.New(bldr.awsSession)
+	dynamodbSvc = dynamodb.New(bldr.AWSSession)
 	config.WithService(dynamodbSvc)
 	return nil
 }
 
 func (bldr *ServiceBuilder) createS3(config *ConfigurationBuilder) error {
 	var s3Svc s3iface.S3API
-	s3Svc = s3.New(bldr.awsSession)
+	s3Svc = s3.New(bldr.AWSSession)
 	config.WithService(s3Svc)
 	return nil
 }
 
 func (bldr *ServiceBuilder) createCognito(config *ConfigurationBuilder) error {
 	var cognitoSvc cognitoidentityprovideriface.CognitoIdentityProviderAPI
-	cognitoSvc = cognitoidentityprovider.New(bldr.awsSession)
+	cognitoSvc = cognitoidentityprovider.New(bldr.AWSSession)
 	config.WithService(cognitoSvc)
 	return nil
 }
 
 func (bldr *ServiceBuilder) createCodeBuild(config *ConfigurationBuilder) error {
 	var codeBuildSvc codebuildiface.CodeBuildAPI
-	codeBuildSvc = codebuild.New(bldr.awsSession)
+	codeBuildSvc = codebuild.New(bldr.AWSSession)
 	config.WithService(codeBuildSvc)
 	return nil
 }
@@ -207,7 +207,7 @@ func (bldr *ServiceBuilder) createDAO(config *ConfigurationBuilder) error {
 	err := bldr.Config.GetService(&dynamodbSvc)
 
 	if err != nil {
-		log.Println("Could not find DynamoDB iface in services")
+		log.Println("Could not find DynamoDB service. Call WithDynamoDB() before WithDAO()")
 		return err
 	}
 

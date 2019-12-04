@@ -15,12 +15,14 @@ import (
 	"github.com/awslabs/aws-lambda-go-api-proxy/gorillamux"
 )
 
-type settings struct {
+type accountControllerConfiguration struct {
 	policyName                  string   `env:"PRINCIPAL_POLICY_NAME" defaultEnv:"DCEPrincipalDefaultPolicy"`
 	accountCreatedTopicArn      string   `env:"ACCOUNT_CREATED_TOPIC_ARN" defaultEnv:"DefaultAccountCreatedTopicArn"`
+	accountDeletedTopicArn      string   `env:"ACCOUNT_DELETED_TOPIC_ARN"`
 	artifactsBucket             string   `env:"ARTIFACTS_BUCKET" defaultEnv:"DefaultArtifactBucket"`
 	principalPolicyS3Key        string   `env:"PRINCIPAL_POLICY_S3_KEY" defaultEnv:"DefaultPrincipalPolicyS3Key"`
 	principalRoleName           string   `env:"PRINCIPAL_ROLE_NAME" defaultEnv:"DCEPrincipal"`
+	principalPolicyName         string   `env:"PRINCIPAL_POLICY_NAME"`
 	principalIAMDenyTags        []string `env:"PRINCIPAL_IAM_DENY_TAGS" defaultEnv:"DefaultPrincipalIamDenyTags"`
 	principalMaxSessionDuration int64    `env:"PRINCIPAL_MAX_SESSION_DURATION" defaultEnv:"100"`
 	tags                        []*iam.Tag
@@ -38,8 +40,10 @@ var (
 	muxLambda *gorillamux.GorillaMuxAdapter
 	// CurrentAccountID - The ID of the AWS Account this is running in
 	CurrentAccountID *string
-	// AWSServices handles the configuration of the AWS services
-	AWSServices *config.AWSServiceBuilder
+	// Services handles the configuration of the AWS services
+	Services *config.ServiceBuilder
+	// Settings - the configuration settings for the controller
+	Settings *accountControllerConfiguration
 )
 
 func init() {
@@ -101,23 +105,30 @@ func init() {
 // initConfig configures package-level variables
 // loaded from env vars.
 func initConfig() {
+
 	cfgBldr := &config.ConfigurationBuilder{}
+	if err := cfgBldr.Unmarshal(&Settings); err != nil {
+		log.Fatalf("Could not load configuration: %s", err.Error())
+	}
+
 	// load up the values into the various settings...
 	cfgBldr.WithEnv("AWS_CURRENT_REGION", "AWS_CURRENT_REGION", "us-east-1").Build()
 	svcBldr := &config.ServiceBuilder{Config: cfgBldr}
 
 	_, err := svcBldr.
+		// AWS services...
 		WithDynamoDB().
-		WithDAO().
 		WithSTS().
 		WithS3().
 		WithSNS().
 		WithSQS().
+		// DCE services...
+		WithDAO().
 		WithRoleManager().
 		Build()
 
 	if err != nil {
-
+		Services = svcBldr
 	}
 }
 

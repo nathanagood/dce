@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/Optum/dce/pkg/common"
+	"github.com/Optum/dce/pkg/config"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
@@ -22,20 +22,18 @@ type Route struct {
 	HandlerFunc http.HandlerFunc
 }
 
-var (
-	debug bool
-)
-
-func init() {
-	config := common.DefaultEnvConfig{}
-	debug = config.GetEnvBoolVar("DEBUG", false)
-}
-
 // Routes - The list of Routes
 type Routes []Route
 
 // NewRouter - Create a new router
-func NewRouter(routes Routes) *mux.Router {
+func NewRouter(config *config.ConfigurationBuilder, routes Routes) *mux.Router {
+
+	debug, err := config.GetBoolVal("DEBUG")
+
+	if err != nil {
+		debug = false
+	}
+
 	router := mux.NewRouter().StrictSlash(true)
 	for _, route := range routes {
 		var handler http.Handler

@@ -15,7 +15,10 @@ import (
 	"github.com/Optum/dce/pkg/rolemanager"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/sns/snsiface"
+	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
 	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 )
 
 // CreateAccount - Function to validate the account request to add into the pool and
@@ -29,7 +32,19 @@ func CreateAccount(w http.ResponseWriter, r *http.Request) {
 	err = decoder.Decode(&request)
 
 	if err != nil {
-		WriteAPIErrorResponse(w, http.StatusBadRequest, "ClientError", "invalid request parameters")
+		response.WriteAPIErrorResponse(w, http.StatusBadRequest, "ClientError", "invalid request parameters")
+		return
+	}
+
+	var tokenSvc stsiface.STSAPI
+	if err := Services.Config.GetService(&tokenSvc); err != nil {
+		response.WriteServerErrorWithResponse(w, "Could not create token service")
+		return
+	}
+
+	var dao db.DBer
+	if err := Services.Config.GetService(&dao); err != nil {
+		response.WriteServerErrorWithResponse(w, "Could not create data service")
 		return
 	}
 
@@ -41,32 +56,32 @@ func CreateAccount(w http.ResponseWriter, r *http.Request) {
 	// Validate the request body
 	isValid, validationRes := request.Validate()
 	if !isValid {
-		WriteAPIErrorResponse(w, http.StatusBadRequest, "ClientError", *validationRes)
+		response.WriteAPIErrorResponse(w, http.StatusBadRequest, "ClientError", *validationRes)
 		return
 	}
 
 	// Check if the account already exists
-	existingAccount, err := Dao.GetAccount(request.ID)
+	existingAccount, err := dao.GetAccount(request.ID)
 	if err != nil {
 		log.Printf("Failed to add account %s to pool: %s",
 			request.ID, err.Error())
-		WriteAPIErrorResponse(w, http.StatusInternalServerError, "ServerError", "")
+		response.WriteAPIErrorResponse(w, http.StatusInternalServerError, "ServerError", "")
 		return
 	}
 	if existingAccount != nil {
-		WriteAlreadyExistsError(w)
+		response.WriteAlreadyExistsError(w)
 		return
 	}
 
 	// Verify that we can assume role in the account,
 	// using the `adminRoleArn`
-	_, err = TokenSvc.AssumeRole(&sts.AssumeRoleInput{
+	_, err = tokenSvc.AssumeRole(&sts.AssumeRoleInput{
 		RoleArn:         aws.String(request.AdminRoleArn),
 		RoleSessionName: aws.String("MasterAssumeRoleVerification"),
 	})
 
 	if err != nil {
-		WriteRequestValidationError(
+		response.WriteRequestValidationError(
 			w,
 			fmt.Sprintf("Unable to add account %s to pool: adminRole is not assumable by the master account", request.ID),
 		)
@@ -89,26 +104,32 @@ func CreateAccount(w http.ResponseWriter, r *http.Request) {
 	createRolRes, policyHash, err := createPrincipalRole(account, masterAccountID)
 	if err != nil {
 		log.Printf("failed to create principal role for %s: %s", request.ID, err)
-		WriteServerErrorWithResponse(w, "Internal server error")
+		response.WriteServerErrorWithResponse(w, "Internal server error")
 		return
 	}
 	account.PrincipalRoleArn = createRolRes.RoleArn
 	account.PrincipalPolicyHash = policyHash
 
 	// Write the Account to the DB
-	err = Dao.PutAccount(account)
+	err = dao.PutAccount(account)
 	if err != nil {
 		log.Printf("Failed to add account %s to pool: %s",
 			request.ID, err.Error())
-		WriteServerErrorWithResponse(w, "Internal server error")
+		response.WriteServerErrorWithResponse(w, "Internal server error")
 		return
 	}
 
+	var queue sqsiface.SQSAPI
+	if err := Services.Config.GetService(&queue); err != nil {
+		response.WriteServerErrorWithResponse(w, "Internal server error")
+		return
+	}
 	// Add Account to Reset Queue
-	err = Queue.SendMessage(&resetQueueURL, &account.ID)
+	msgInput := common.BuildSendMessageInput(aws.String(Settings.resetQueueURL), &account.ID)
+	_, err = queue.SendMessage(&msgInput)
 	if err != nil {
 		log.Printf("Failed to add account %s to reset Queue: %s", account.ID, err)
-		WriteServerErrorWithResponse(w, "Internal server error")
+		response.WriteServerErrorWithResponse(w, "Internal server error")
 		return
 	}
 
@@ -117,27 +138,31 @@ func CreateAccount(w http.ResponseWriter, r *http.Request) {
 	snsMessage, err := common.PrepareSNSMessageJSON(accountResponse)
 	if err != nil {
 		log.Printf("Failed to create SNS account-created message for %s: %s", account.ID, err)
-		WriteServerErrorWithResponse(w, "Internal server error")
+		response.WriteServerErrorWithResponse(w, "Internal server error")
 		return
 	}
 
-	// TODO: Initialize these in a better spot.
+	var snsSvc snsiface.SNSAPI
+	if err := Services.Config.GetService(&snsSvc); err != nil {
+		response.WriteServerErrorWithResponse(w, "Internal server error")
+		return
+	}
 
-	_, err = SnsSvc.PublishMessage(&accountCreatedTopicArn, &snsMessage, true)
+	_, err = snsSvc.Publish(common.CreateJSONPublishInput(&Settings.accountCreatedTopicArn, &snsMessage))
 	if err != nil {
 		log.Printf("Failed to publish SNS account-created message for %s: %s", account.ID, err)
-		WriteServerErrorWithResponse(w, "Internal server error")
+		response.WriteServerErrorWithResponse(w, "Internal server error")
 		return
 	}
 
 	accountResponseJSON, err := json.Marshal(accountResponse)
 	if err != nil {
 		log.Printf("ERROR: Failed to marshal account response for %s: %s", account.ID, err)
-		WriteServerErrorWithResponse(w, "Internal server error")
+		response.WriteServerErrorWithResponse(w, "Internal server error")
 		return
 	}
 
-	WriteAPIResponse(
+	response.WriteAPIResponse(
 		w,
 		http.StatusCreated,
 		string(accountResponseJSON),
@@ -213,8 +238,13 @@ func createPrincipalRole(childAccount db.Account, masterAccountID string) (*role
 		return nil, "", err
 	}
 
+	var tokenSvc stsiface.STSAPI
+	if err := Services.Config.GetService(&tokenSvc); err != nil {
+		return nil, "", err
+	}
+
 	// Assume role into the new account
-	accountSession, err := TokenSvc.NewSession(AWSSession, childAccount.AdminRoleArn)
+	accountSession, err := common.NewSession(Services.AWSSession, childAccount.AdminRoleArn)
 	if err != nil {
 		return nil, "", err
 	}

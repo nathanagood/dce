@@ -3,13 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+
 	"github.com/Optum/dce/pkg/api/response"
 	"github.com/Optum/dce/pkg/db"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/gorilla/mux"
-	"log"
-	"net/http"
 )
 
 // updateAccountRequest mirrors the db.Account object,
@@ -31,12 +32,24 @@ type updateAccountRequest struct {
 func UpdateAccountByID(w http.ResponseWriter, r *http.Request) {
 	accountID := mux.Vars(r)["accountId"]
 
+	var tokenSvc sts.STS
+	if err := Services.Config.GetService(&tokenSvc); err != nil {
+		response.WriteServerErrorWithResponse(w, "Could not create token service")
+		return
+	}
+
+	var dao db.DBer
+	if err := Services.Config.GetService(&dao); err != nil {
+		response.WriteServerErrorWithResponse(w, "Could not create data service")
+		return
+	}
+
 	// Deserialize the request JSON as an request object
 	var request *updateAccountRequest
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&request)
 	if err != nil {
-		WriteAPIErrorResponse(w, http.StatusBadRequest, "ClientError", "invalid request parameters")
+		response.WriteAPIErrorResponse(w, http.StatusBadRequest, "ClientError", "invalid request parameters")
 		return
 	}
 	request.ID = &accountID
@@ -44,13 +57,13 @@ func UpdateAccountByID(w http.ResponseWriter, r *http.Request) {
 	// If the request includes a new adminRoleArn,
 	// validate that we can assume the ARN
 	if request.AdminRoleArn != nil {
-		_, err = TokenSvc.AssumeRole(&sts.AssumeRoleInput{
+		_, err = tokenSvc.AssumeRole(&sts.AssumeRoleInput{
 			RoleArn:         request.AdminRoleArn,
 			RoleSessionName: aws.String("MasterAssumeRoleVerification"),
 		})
 
 		if err != nil {
-			WriteRequestValidationError(
+			response.WriteRequestValidationError(
 				w,
 				fmt.Sprintf("Unable to update account %s: "+
 					"admin role is not assumable by the master account",
@@ -78,7 +91,7 @@ func UpdateAccountByID(w http.ResponseWriter, r *http.Request) {
 		accountPartial.Metadata = *request.Metadata
 	}
 	if len(fieldsToUpdate) == 0 {
-		WriteRequestValidationError(
+		response.WriteRequestValidationError(
 			w,
 			fmt.Sprintf("Unable to update account %s: "+
 				"no updatable fields provided",
@@ -88,27 +101,27 @@ func UpdateAccountByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the DB record
-	acct, err := Dao.UpdateAccount(accountPartial, fieldsToUpdate)
+	acct, err := dao.UpdateAccount(accountPartial, fieldsToUpdate)
 	if err != nil {
 		// If the account doesn't exist, return a 404
 		if _, ok := err.(*db.NotFoundError); ok {
-			WriteNotFoundError(w)
+			response.WriteNotFoundError(w)
 			return
 		}
 		// Other DB errors return a 500
 		log.Printf("ERROR: Failed to update account %s: %s", *request.ID, err)
-		WriteServerErrorWithResponse(w, "Internal Server Error")
+		response.WriteServerErrorWithResponse(w, "Internal Server Error")
 		return
 	}
 
 	accountJSON, err := json.Marshal(response.AccountResponse(*acct))
 	if err != nil {
 		log.Printf("ERROR: Failed to marshal account response for %s: %s", *request.ID, err)
-		WriteServerErrorWithResponse(w, "Internal server error")
+		response.WriteServerErrorWithResponse(w, "Internal server error")
 		return
 	}
 
-	WriteAPIResponse(
+	response.WriteAPIResponse(
 		w,
 		http.StatusOK,
 		string(accountJSON),

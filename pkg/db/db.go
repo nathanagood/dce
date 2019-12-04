@@ -12,7 +12,6 @@ import (
 
 	guuid "github.com/google/uuid"
 
-	"github.com/Optum/dce/pkg/config"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -911,36 +910,6 @@ func New(client *dynamodb.DynamoDB, accountTableName string, leaseTableName stri
 		DefaultLeaseLengthInDays: defaultLeaseLengthInDays,
 		ConsistentRead:           false,
 	}
-}
-
-/*
-NewFromEnv creates a DB instance configured from environment variables.
-Requires env vars for:
-
-- AWS_CURRENT_REGION
-- ACCOUNT_DB
-- LEASE_DB
-*/
-func NewFromEnv(services *config.ServiceBuilder) (*DB, error) {
-
-	var dynamodbSvc dynamodbiface.DynamoDBAPI
-	dbConfig := &DB{}
-	err := services.Config.Unmarshal(dbConfig)
-
-	if err != nil {
-		log.Printf("Error while trying to create DB from env: %s", err.Error())
-		return nil, err
-	}
-
-	err = services.Config.GetService(&dynamodbSvc)
-
-	if err != nil {
-		log.Println("Could not find DynamoDB iface in services")
-		return nil, err
-	}
-	dbConfig.Client = dynamodbSvc
-
-	return dbConfig, nil
 }
 
 type buildUpdateExpressInput struct {

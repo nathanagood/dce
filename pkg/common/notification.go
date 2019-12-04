@@ -18,6 +18,28 @@ type SNS struct {
 	Client *sns.SNS
 }
 
+// CreateJSONPublishInput creates a `sns.PublishInput`
+func CreateJSONPublishInput(topicArn *string, message *string) *sns.PublishInput {
+	var publishInput *sns.PublishInput
+	messageStructure := "json"
+	publishInput = &sns.PublishInput{
+		TopicArn:         topicArn,
+		Message:          message,
+		MessageStructure: &messageStructure,
+	}
+	return publishInput
+}
+
+// CreatePublishInput creates a `sns.PublishInput`
+func CreatePublishInput(topicArn *string, message *string) *sns.PublishInput {
+	var publishInput *sns.PublishInput
+	publishInput = &sns.PublishInput{
+		TopicArn: topicArn,
+		Message:  message,
+	}
+	return publishInput
+}
+
 // PublishMessage pushes the provided messeage to an SNS Topic and returns the
 // messages' ID.
 func (notif *SNS) PublishMessage(topicArn *string, message *string,

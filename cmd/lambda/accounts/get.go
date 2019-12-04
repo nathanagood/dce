@@ -15,12 +15,14 @@ import (
 // GetAllAccounts - Returns all the accounts.
 func GetAllAccounts(w http.ResponseWriter, r *http.Request) {
 	// Fetch the accounts.
-	accounts, err := Dao.GetAccounts()
+	var dao db.DBer
+	Services.Config.GetService(&dao)
+	accounts, err := dao.GetAccounts()
 
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed to query database: %s", err)
 		log.Print(errorMessage)
-		WriteServerErrorWithResponse(w, errorMessage)
+		response.WriteServerErrorWithResponse(w, errorMessage)
 	}
 
 	// Serialize them for the JSON response.
@@ -38,17 +40,23 @@ func GetAllAccounts(w http.ResponseWriter, r *http.Request) {
 func GetAccountByID(w http.ResponseWriter, r *http.Request) {
 
 	accountID := mux.Vars(r)["accountId"]
-	account, err := Dao.GetAccount(accountID)
+
+	var dao db.DBer
+	if err := Services.Config.GetService(&dao); err != nil {
+		response.WriteServerErrorWithResponse(w, "Could not get data service")
+	}
+
+	account, err := dao.GetAccount(accountID)
 
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed List on Account Lease %s", accountID)
 		log.Print(errorMessage)
-		WriteServerErrorWithResponse(w, errorMessage)
+		response.WriteServerErrorWithResponse(w, errorMessage)
 		return
 	}
 
 	if account == nil {
-		WriteNotFoundError(w)
+		response.WriteNotFoundError(w)
 		return
 	}
 
@@ -63,16 +71,18 @@ func GetAccountByStatus(w http.ResponseWriter, r *http.Request) {
 	accountStatus := r.FormValue("accountStatus")
 	status, err := db.ParseAccountStatus(accountStatus)
 
-	accounts, err := Dao.FindAccountsByStatus(status)
+	var dao db.DBer
+	Services.Config.GetService(&dao)
+	accounts, err := dao.FindAccountsByStatus(status)
 
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed to query database: %s", err)
 		log.Print(errorMessage)
-		WriteServerErrorWithResponse(w, errorMessage)
+		response.WriteServerErrorWithResponse(w, errorMessage)
 	}
 
 	if len(accounts) == 0 {
-		WriteNotFoundError(w)
+		response.WriteNotFoundError(w)
 		return
 	}
 
