@@ -24,6 +24,7 @@ import (
 
 	"github.com/Optum/dce/pkg/db"
 	"github.com/Optum/dce/pkg/rolemanager"
+	"github.com/Optum/dce/pkg/common"
 )
 
 // AWSSessionKey is the key for the configuration for the AWS session
@@ -93,6 +94,12 @@ func (bldr *ServiceBuilder) WithRoleManager() *ServiceBuilder {
 // WithDAO tells the builder to add the DCE DAO (DBer) service to the `ConfigurationBuilder`
 func (bldr *ServiceBuilder) WithDAO() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createDAO)
+	return bldr
+}
+
+// WithStorageService tells the builder to add the DCE DAO (DBer) service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithStorageService() *ServiceBuilder {
+	bldr.handlers = append(bldr.handlers, bldr.createStorageService)
 	return bldr
 }
 
@@ -225,5 +232,12 @@ func (bldr *ServiceBuilder) createDAO(config *ConfigurationBuilder) error {
 	daoSvc = &daoSvcImpl
 
 	config.WithService(daoSvc)
+	return nil
+}
+
+func (bldr *ServiceBuilder) createStorageService(config *ConfigurationBuilder) error {
+	var storageService common.Storager
+	storageService = &common.S3{}
+	config.WithService(storageService)
 	return nil
 }

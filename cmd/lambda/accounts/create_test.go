@@ -66,7 +66,10 @@ func TestCreate(t *testing.T) {
 		mockSns := commonMocks.Notificationer{}
 		mockSns.On("PublishMessage", mock.Anything, mock.Anything, true).Return(nil, nil)
 
-		Dao = &mockDb
+		var dbSvc db.DBer
+		dbSvc = mockDb
+		Services.Config.WithService(&dbSvc)
+
 		TokenSvc = &mockTokenService
 		StorageSvc = &mockStorageSvc
 		RoleManager = &mockRoleManager

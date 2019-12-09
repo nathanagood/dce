@@ -226,13 +226,18 @@ func createPrincipalRole(childAccount db.Account, masterAccountID string) (*role
 
 	// Render the default policy for the principal
 
-	policy, policyHash, err := StorageSvc.GetTemplateObject(artifactsBucket, principalPolicyS3Key,
+	var storageSvc common.S3
+	if err := Services.Config.GetService(&storageSvc); err != nil {
+		return nil, "", err
+	}
+
+	policy, policyHash, err := storageSvc.GetTemplateObject(Settings.artifactsBucket, Settings.principalPolicyS3Key,
 		principalPolicyInput{
-			PrincipalPolicyArn:   fmt.Sprintf("arn:aws:iam::%s:policy/%s", childAccount.ID, policyName),
-			PrincipalRoleArn:     fmt.Sprintf("arn:aws:iam::%s:role/%s", childAccount.ID, principalRoleName),
-			PrincipalIAMDenyTags: principalIAMDenyTags,
+			PrincipalPolicyArn:   fmt.Sprintf("arn:aws:iam::%s:policy/%s", childAccount.ID, Settings.policyName),
+			PrincipalRoleArn:     fmt.Sprintf("arn:aws:iam::%s:role/%s", childAccount.ID, Settings.principalRoleName),
+			PrincipalIAMDenyTags: Settings.principalIAMDenyTags,
 			AdminRoleArn:         childAccount.AdminRoleArn,
-			Regions:              allowedRegions,
+			Regions:              Settings.allowedRegions,
 		})
 	if err != nil {
 		return nil, "", err
@@ -250,18 +255,23 @@ func createPrincipalRole(childAccount db.Account, masterAccountID string) (*role
 	}
 	iamClient := iam.New(accountSession)
 
+	var roleMgr rolemanager.RoleManager
+	if err := Services.Config.GetService(&storageSvc); err != nil {
+		return nil, "", err
+	}
+
 	// Create the Role + Policy
-	RoleManager.SetIAMClient(iamClient)
+	roleMgr.SetIAMClient(iamClient)
 	createRoleOutput := &rolemanager.CreateRoleWithPolicyOutput{}
-	createRoleOutput, err = RoleManager.CreateRoleWithPolicy(&rolemanager.CreateRoleWithPolicyInput{
-		RoleName:                 principalRoleName,
+	createRoleOutput, err = roleMgr.CreateRoleWithPolicy(&rolemanager.CreateRoleWithPolicyInput{
+		RoleName:                 Settings.principalRoleName,
 		RoleDescription:          "Role to be assumed by principal users of DCE",
 		AssumeRolePolicyDocument: assumeRolePolicy,
-		MaxSessionDuration:       principalMaxSessionDuration,
-		PolicyName:               policyName,
+		MaxSessionDuration:       Settings.principalMaxSessionDuration,
+		PolicyName:               Settings.policyName,
 		PolicyDocument:           policy,
 		PolicyDescription:        "Policy for principal users of DCE",
-		Tags: append(tags,
+		Tags: append(Settings.tags,
 			&iam.Tag{Key: aws.String("Name"), Value: aws.String("DCEPrincipal")},
 		),
 		IgnoreAlreadyExistsErrors: true,

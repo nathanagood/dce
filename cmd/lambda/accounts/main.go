@@ -48,6 +48,8 @@ var (
 
 func init() {
 
+	initConfig()
+
 	log.Println("Cold start; creating router for /accounts")
 	accountRoutes := api.Routes{
 		// Routes with query strings always go first,
@@ -98,7 +100,7 @@ func init() {
 			CreateAccount,
 		},
 	}
-	r := api.NewRouter(accountRoutes)
+	r := api.NewRouter(Services.Config, accountRoutes)
 	muxLambda = gorillamux.New(r)
 }
 
@@ -125,6 +127,7 @@ func initConfig() {
 		// DCE services...
 		WithDAO().
 		WithRoleManager().
+		WithStorageService().
 		Build()
 
 	if err != nil {
@@ -140,7 +143,7 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 }
 
 func main() {
-	initConfig()
+	// initConfig()
 	// Send Lambda requests to the router
 	lambda.Start(Handler)
 }
