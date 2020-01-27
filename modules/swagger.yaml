@@ -1,19 +1,13 @@
-swagger: "2.0"
+openapi: 3.0.0
 info:
   version: "1.0"
   title: ${namespace}
-schemes:
-  - https
 paths:
-  "/accounts":
+  /accounts:
     options:
       summary: CORS support
       description: |
         Enable CORS by returning correct headers
-      consumes:
-        - application/json
-      produces:
-        - application/json
       tags:
         - CORS
       x-amazon-apigateway-integration:
@@ -24,7 +18,7 @@ paths:
               "statusCode" : 200
             }
         responses:
-          "default":
+          default:
             statusCode: "200"
             responseParameters:
               method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
@@ -34,139 +28,140 @@ paths:
               application/json: |
                 {}
       responses:
-        200:
+        "200":
           description: Default response for CORS method
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
+              schema:
+                type: string
     get:
-      summary: Get accounts
-      produces:
-        - application/json
+      summary: Lists accounts
       parameters:
         - in: query
-          name: id
-          type: string
-          required: false
-          description: Account ID.
-        - in: query
           name: status
-          type: string
           required: false
-          description: Status of the account.
-        - in: query
-          name: adminRoleArn
-          type: string
-          required: false
-          description: The Admin Role ARN for the account.
-        - in: query
-          name: principalRoleArn
-          type: string
-          required: false
-          description: The Principal Role ARN for the account.
-        - in: query
-          name: principalPolicyHash
-          type: string
-          required: false
-          description: The Principal Policy version for the account.
-        - in: query
-          name: nextId
-          type: string
-          required: false
-          description:
-            Account ID with which to begin the scan operation. This is used to traverse through paginated
-            results.
+          description: Account status
+          schema:
+            $ref: '#/components/schemas/accountStatus'
         - in: query
           name: limit
-          type: integer
           required: false
-          description:
-            The maximum number of accounts to evaluate (not necessarily the number of matching accounts). If
-            there is another page, the URL for page will be in the response Link header.
-      responses:
-        200:
-          description: OK
+          description: the maximum number of results to return
           schema:
-            type: array
-            items:
-              $ref: "#/definitions/account"
+            type: number
+        - in: query
+          name: nextId
+          required: false
+          description: Used internally for paging
+          schema:
+            type: string            
+      responses:
+        "200":
+          description: A list of accounts
           headers:
-            Link:
-              type: string
-              description: Appears only when there is another page of results in the query. The value contains the URL for the next page of the results and follows the `<url>; rel="next"` convention.
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        403:
-          description: "Unauthorized"
+              schema:
+                type: string
+            Link:
+              description: URL link to the next page of responses
+              schema:
+                type: string
+          content: 
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/account"
+        "401":
+          description: Invalid request
+        "403":
+          description: Unauthorized
+        "500":
+          description: Internal server error
       x-amazon-apigateway-integration:
         uri: ${accounts_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
     post:
       summary: Add an AWS Account to the account pool
-      consumes:
-        - application/json
-      parameters:
-        - in: body
-          name: account
-          description: Account creation parameters
-          schema:
-            type: object
-            required:
-              - id
-              - adminRoleArn
-            properties:
-              id:
-                type: string
-                description: AWS Account ID
-              adminRoleArn:
-                type: string
-                description: |
-                  ARN for an IAM role within this AWS account. The DCE master account will assume this IAM role to execute operations within this AWS account. This IAM role is configured by the client, and must be configured with [a Trust Relationship with the DCE master account.](/https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html)
-              metadata:
-                type: object
-                description: Arbitrary metadata to attach to the account object.
-      produces:
-        - application/json
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+                - adminRoleArn
+              properties:
+                id:
+                  type: string
+                  description: AWS Account ID
+                adminRoleArn:
+                  type: string
+                  description: >
+                    ARN for an IAM role within this AWS account. The DCE master
+                    account will assume this IAM role to execute operations
+                    within this AWS account. This IAM role is configured by the
+                    client, and must be configured with [a Trust Relationship
+                    with the DCE master
+                    account.](/https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html)
+                metadata:
+                  type: object
+                  description: Arbitrary metadata to attach to the account object.
+        description: Account creation parameters
       responses:
-        201:
-          $ref: "#/definitions/account"
+        "201":
+          description: Successful creation
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        403:
-          description: "Failed to authenticate request"
+              schema:
+                type: string
+        "401":
+          description: Invalid request
+        "403":
+          description: Failed to authenticate request
+        "500":
+          description: Internal server error
       x-amazon-apigateway-integration:
         uri: ${accounts_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
-  "/accounts/{id}":
+  "/accounts/{accountId}":
     options:
       summary: CORS support
       description: |
         Enable CORS by returning correct headers
-      consumes:
-        - application/json
-      produces:
-        - application/json
+      parameters:
+        - in: path
+          name: accountId
+          required: true
+          description: AWS Account ID
+          schema:
+            type: string
       tags:
         - CORS
       x-amazon-apigateway-integration:
@@ -177,141 +172,159 @@ paths:
               "statusCode" : 200
             }
         responses:
-          "default":
+          default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Securit\
+                y-Token'"
               method.response.header.Access-Control-Allow-Methods: "'*'"
               method.response.header.Access-Control-Allow-Origin: "'*'"
             responseTemplates:
               application/json: |
                 {}
       responses:
-        200:
+        "200":
           description: Default response for CORS method
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
+              schema:
+                type: string
     get:
       summary: Get a specific account by an account ID
-      produces:
-        - application/json
       parameters:
         - in: path
-          name: id
-          type: string
+          name: accountId
           required: true
           description: AWS Account ID
-      responses:
-        200:
           schema:
-            $ref: "#/definitions/account"
+            type: string
+      responses:
+        "200":
+          description: Success
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        403:
-          description: "Failed to retrieve account"
+              schema:
+                type: string
+            Link:
+              description: URL link to the next page of responses
+              schema:
+                type: string 
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/account"
+        "403":
+          description: Failed to retrieve account
       x-amazon-apigateway-integration:
         uri: ${accounts_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
     put:
       summary: Update an account
-      consumes:
-        - application/json
-      produces:
-        - application/json
       parameters:
         - in: path
-          name: id
-          type: string
+          name: accountId
           required: true
           description: AWS Account ID
-        - in: body
-          name: account
-          description: Account parameters to modify
           schema:
-            type: object
-            properties:
-              adminRoleArn:
-                type: string
-                description: |
-                  ARN for an IAM role within this AWS account. The DCE master account will assume this IAM role to execute operations within this AWS account. This IAM role is configured by the client, and must be configured with [a Trust Relationship with the DCE master account.](/https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html)
-              metadata:
-                type: object
-                additionalProperties: true
-                description: Arbitrary metadata to attach to the account object.
-
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                adminRoleArn:
+                  type: string
+                  description: >
+                    ARN for an IAM role within this AWS account. The DCE master
+                    account will assume this IAM role to execute operations
+                    within this AWS account. This IAM role is configured by the
+                    client, and must be configured with [a Trust Relationship
+                    with the DCE master
+                    account.](/https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html)
+                metadata:
+                  type: object
+                  additionalProperties: true
+                  description: Arbitrary metadata to attach to the account object.
+        description: Account parameters to modify
       responses:
-        200:
-          $ref: "#/definitions/account"
+        "200":
+          description: Success
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        403:
-          description: "Forbidden"
+              schema:
+                type: string
+        "403":
+          description: Forbidden
       x-amazon-apigateway-integration:
         uri: ${accounts_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
     delete:
       summary: Delete an account by ID.
       parameters:
         - in: path
-          name: id
-          type: string
+          name: accountId
           required: true
           description: The ID of the account to be deleted.
+          schema:
+            type: string
       responses:
-        204:
-          description: "The account has been successfully deleted."
+        "204":
+          description: The account has been successfully deleted.
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        403:
-          description: "Unauthorized."
-        404:
-          description: "No account found for the given ID."
-        409:
-          description: "The account is unable to be deleted."
+              schema:
+                type: string
+        "403":
+          description: Unauthorized.
+        "404":
+          description: No account found for the given ID.
+        "409":
+          description: The account is unable to be deleted.
       x-amazon-apigateway-integration:
         uri: ${accounts_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
-  "/auth":
+  /leases:
     options:
       summary: CORS support
       description: |
         Enable CORS by returning correct headers
-      consumes:
-        - application/json
-      produces:
-        - application/json
       tags:
         - CORS
       x-amazon-apigateway-integration:
@@ -322,314 +335,211 @@ paths:
               "statusCode" : 200
             }
         responses:
-          "default":
+          default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Securit\
+                y-Token'"
               method.response.header.Access-Control-Allow-Methods: "'*'"
               method.response.header.Access-Control-Allow-Origin: "'*'"
             responseTemplates:
               application/json: |
                 {}
       responses:
-        200:
+        "200":
           description: Default response for CORS method
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
-            Access-Control-Allow-Methods:
-              type: "string"
-            Access-Control-Allow-Origin:
-              type: "string"
-    get:
-      summary: Get the DCE system authentication web page
-      produces:
-        - text/html
-      responses:
-        200:
-          schema:
-            text/plain:
               schema:
                 type: string
-          headers:
-            Access-Control-Allow-Headers:
-              type: "string"
             Access-Control-Allow-Methods:
-              type: "string"
-            Access-Control-Allow-Origin:
-              type: "string"
-      x-amazon-apigateway-integration:
-        uri: ${credentials_web_page_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
-  "/auth/{file+}":
-    options:
-      summary: CORS support
-      description: |
-        Enable CORS by returning correct headers
-      consumes:
-        - application/json
-      produces:
-        - application/json
-      tags:
-        - CORS
-      x-amazon-apigateway-integration:
-        type: mock
-        requestTemplates:
-          application/json: |
-            {
-              "statusCode" : 200
-            }
-        responses:
-          "default":
-            statusCode: "200"
-            responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
-            responseTemplates:
-              application/json: |
-                {}
-      responses:
-        200:
-          description: Default response for CORS method
-          headers:
-            Access-Control-Allow-Headers:
-              type: "string"
-            Access-Control-Allow-Methods:
-              type: "string"
-            Access-Control-Allow-Origin:
-              type: "string"
-    get:
-      summary: Get the DCE system authentication web page static assets
-      produces:
-        - text/html
-        - text/javascript
-        - text/css
-      responses:
-        200:
-          schema:
-            text/plain:
               schema:
                 type: string
-          headers:
-            Access-Control-Allow-Headers:
-              type: "string"
-            Access-Control-Allow-Methods:
-              type: "string"
             Access-Control-Allow-Origin:
-              type: "string"
-      x-amazon-apigateway-integration:
-        uri: ${credentials_web_page_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
-  "/leases":
-    options:
-      summary: CORS support
-      description: |
-        Enable CORS by returning correct headers
-      consumes:
-        - application/json
-      produces:
-        - application/json
-      tags:
-        - CORS
-      x-amazon-apigateway-integration:
-        type: mock
-        requestTemplates:
-          application/json: |
-            {
-              "statusCode" : 200
-            }
-        responses:
-          "default":
-            statusCode: "200"
-            responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
-            responseTemplates:
-              application/json: |
-                {}
-      responses:
-        200:
-          description: Default response for CORS method
-          headers:
-            Access-Control-Allow-Headers:
-              type: "string"
-            Access-Control-Allow-Methods:
-              type: "string"
-            Access-Control-Allow-Origin:
-              type: "string"
+              schema:
+                type: string
     post:
       summary: Creates a new lease.
-      consumes:
-        - application/json
-      parameters:
-        - in: body
-          name: lease
-          description: The owner of the lease
-          schema:
-            type: object
-            required:
-              - principalId
-              - budgetAmount
-              - budgetCurrency
-              - budgetNotificationEmails
-            properties:
-              principalId:
-                type: string
-              budgetAmount:
-                type: number
-              budgetCurrency:
-                type: string
-              budgetNotificationEmails:
-                type: array
-                items:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - principalId
+                - budgetAmount
+                - budgetCurrency
+                - budgetNotificationEmails
+              properties:
+                principalId:
                   type: string
-              expiresOn:
-                type: number
-      produces:
-        - application/json
+                budgetAmount:
+                  type: number
+                budgetCurrency:
+                  type: string
+                budgetNotificationEmails:
+                  type: array
+                  items:
+                    type: string
+                expiresOn:
+                  type: number
+        description: The owner of the lease
       responses:
-        201:
-          schema:
-            $ref: "#/definitions/lease"
+        "201":
+          description: Successful creation
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        400:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/lease"
+        "400":
           description: >
-            If the "expiresOn" date specified is non-zero but less than the current epoch date, 
-            "Requested lease has a desired expiry date less than today: <date>" or
-            "Failed to Parse Request Body" if the request body is blank or incorrectly formatted.
-        403:
-          description: "Failed to authenticate request"
-        409:
-          description: Conflict if there is an existing lease already active with the provided principal and account.
-        500:
+            If the "expiresOn" date specified is non-zero but less than the
+            current epoch date,  "Requested lease has a desired expiry date less
+            than today: " or "Failed to Parse Request Body" if the request
+            body is blank or incorrectly formatted.
+        "403":
+          description: Failed to authenticate request
+        "409":
+          description: Conflict if there is an existing lease already active with the
+            provided principal and account.
+        "500":
           description: Server errors if the database cannot be reached.
       x-amazon-apigateway-integration:
         uri: ${leases_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
     delete:
       summary: Removes a lease.
-      consumes:
-        - application/json
-      parameters:
-        - in: body
-          name: lease
-          description: The owner of the lease
-          schema:
-            type: object
-            required:
-              - principalId
-              - accountId
-            properties:
-              principalId:
-                type: string
-              accountId:
-                type: string
-      produces:
-        - application/json
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - principalId
+                - accountId
+              properties:
+                principalId:
+                  type: string
+                accountId:
+                  type: string
+        description: The owner of the lease
       responses:
-        200:
-          schema:
-            $ref: "#/definitions/lease"
-        400:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/lease"
+        "400":
           description: >
-            "Failed to Parse Request Body" if the request body is blank or incorrectly formatted.
-            or if there are no account leases found for the specified accountId or if the account
-            specified is not already Active.
-        403:
-          description: "Failed to authenticate request"
-        500:
+            "Failed to Parse Request Body" if the request body is blank or
+            incorrectly formatted. or if there are no account leases found for
+            the specified accountId or if the account specified is not already
+            Active.
+        "403":
+          description: Failed to authenticate request
+        "500":
           description: Server errors if the database cannot be reached.
       x-amazon-apigateway-integration:
         uri: ${leases_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
     get:
       summary: Get leases
-      produces:
-        - application/json
       parameters:
         - in: query
           name: principalId
-          type: string
           required: false
           description: Principal ID of the leases.
+          schema:
+            type: string
         - in: query
           name: accountId
-          type: string
           required: false
           description: Account ID of the leases.
+          schema:
+            type: string
         - in: query
           name: status
-          type: string
           required: false
           description: Status of the leases.
+          schema:
+            type: string
         - in: query
           name: nextPrincipalId
-          type: string
           required: false
-          description:
-            Principal ID with which to begin the scan operation. This is used to traverse through paginated
-            results.
+          description: Principal ID with which to begin the scan operation. This is used to
+            traverse through paginated results.
+          schema:
+            type: string
         - in: query
           name: nextAccountId
-          type: string
           required: false
-          description:
-            Account ID with which to begin the scan operation. This is used to traverse through paginated
-            results.
+          description: Account ID with which to begin the scan operation. This is used to
+            traverse through paginated results.
+          schema:
+            type: string
         - in: query
           name: limit
-          type: integer
           required: false
-          description:
-            The maximum number of leases to evaluate (not necessarily the number of matching leases). If
-            there is another page, the URL for page will be in the response Link header.
+          description: The maximum number of leases to evaluate (not necessarily the number
+            of matching leases). If there is another page, the URL for page will
+            be in the response Link header.
+          schema:
+            type: integer
       responses:
-        200:
+        "200":
           description: OK
           headers:
             Link:
-              type: string
-              description: Appears only when there is another page of results in the query. The value contains the URL for the next page of the results and follows the `<url>; rel="next"` convention.
+              description: Appears only when there is another page of results in the query.
+                The value contains the URL for the next page of the results and
+                follows the `; rel="next"` convention.
+              schema:
+                type: string
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-          schema:
-            type: array
-            items:
-              $ref: "#/definitions/lease"
-        400:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/lease"
+        "400":
           description: >
-            "Failed to Parse Request Body" if the request body is blank or incorrectly formatted.
-        403:
-          description: "Failed to authenticate request"
+            "Failed to Parse Request Body" if the request body is blank or
+            incorrectly formatted.
+        "403":
+          description: Failed to authenticate request
       x-amazon-apigateway-integration:
         uri: ${leases_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
   "/leases/{id}":
@@ -637,10 +547,13 @@ paths:
       summary: CORS support
       description: |
         Enable CORS by returning correct headers
-      consumes:
-        - application/json
-      produces:
-        - application/json
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: AWS Account ID
+          schema:
+            type: string
       tags:
         - CORS
       x-amazon-apigateway-integration:
@@ -651,81 +564,62 @@ paths:
               "statusCode" : 200
             }
         responses:
-          "default":
+          default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Securit\
+                y-Token'"
               method.response.header.Access-Control-Allow-Methods: "'*'"
               method.response.header.Access-Control-Allow-Origin: "'*'"
             responseTemplates:
               application/json: |
                 {}
       responses:
-        200:
+        "200":
           description: Default response for CORS method
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
+              schema:
+                type: string
     get:
       summary: Get a lease by Id
-      produces:
-        - application/json
       parameters:
         - in: path
           name: id
-          type: string
           required: true
           description: Id for lease
-      responses:
-        200:
           schema:
-            $ref: "#/definitions/lease"
+            type: string
+      responses:
+        "200":
+          description: Success
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        403:
-          description: "Failed to retrieve lease"
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/lease"
+        "403":
+          description: Failed to retrieve lease
       x-amazon-apigateway-integration:
         uri: ${leases_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
-      security:
-        - sigv4: []
-    delete:
-      summary: Delete a lease by ID.
-      parameters:
-        - in: path
-          name: id
-          type: string
-          required: true
-          description: The ID of the lease to be deleted.
-      responses:
-        200:
-          schema:
-            $ref: "#/definitions/lease"
-        400:
-          description: >
-            "Failed to Parse Request Body" if the request body is blank or incorrectly formatted.
-            or if there are no account leases found for the specified accountId or if the account
-            specified is not already Active.
-        403:
-          description: "Failed to authenticate request"
-        500:
-          description: Server errors if the database cannot be reached.
-      x-amazon-apigateway-integration:
-        uri: ${leases_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
   "/leases/{id}/auth":
@@ -733,10 +627,13 @@ paths:
       summary: CORS support
       description: |
         Enable CORS by returning correct headers
-      consumes:
-        - application/json
-      produces:
-        - application/json
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: AWS Account ID
+          schema:
+            type: string
       tags:
         - CORS
       x-amazon-apigateway-integration:
@@ -747,68 +644,73 @@ paths:
               "statusCode" : 200
             }
         responses:
-          "default":
+          default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Securit\
+                y-Token'"
               method.response.header.Access-Control-Allow-Methods: "'*'"
               method.response.header.Access-Control-Allow-Origin: "'*'"
             responseTemplates:
               application/json: |
                 {}
       responses:
-        200:
+        "200":
           description: Default response for CORS method
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
+              schema:
+                type: string
     post:
       summary: Create lease authentication by Id
-      produces:
-        - application/json
       parameters:
         - in: path
           name: id
-          type: string
           required: true
           description: Id for lease
-      responses:
-        201:
           schema:
-            $ref: "#/definitions/leaseAuth"
+            type: string
+      responses:
+        "201":
+          description: Success
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        403:
-          description: "Failed to retrieve lease authentication"
-        500:
-          description: "Server failure"
-        401:
-          description: "Unauthorized"
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/leaseAuth"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Failed to retrieve lease authentication
+        "500":
+          description: Server failure
       x-amazon-apigateway-integration:
         uri: ${lease_auth_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
-  "/usage":
+  /usage:
     options:
       summary: CORS support
       description: |
         Enable CORS by returning correct headers
-      consumes:
-        - application/json
-      produces:
-        - application/json
       tags:
         - CORS
       x-amazon-apigateway-integration:
@@ -819,207 +721,266 @@ paths:
               "statusCode" : 200
             }
         responses:
-          "default":
+          default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Securit\
+                y-Token'"
               method.response.header.Access-Control-Allow-Methods: "'*'"
               method.response.header.Access-Control-Allow-Origin: "'*'"
             responseTemplates:
               application/json: |
                 {}
       responses:
-        200:
+        "200":
           description: Default response for CORS method
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
+              schema:
+                type: string
     get:
       summary: Get usage records by date range
-      produces:
-        - application/json
       parameters:
-        - in: path
+        - in: query
           name: startDate
-          type: number
-          required: true
+          required: false
           description: start date of the usage
-        - in: path
-          name: endDate
-          type: number
-          required: true
-          description: end date of the usage
-      responses:
-        200:
           schema:
-            $ref: "#/definitions/usage"
+            type: number
+        - in: query
+          name: endDate
+          required: false
+          description: end date of the usage
+          schema:
+            type: number
+        - in: query
+          name: principalId
+          required: false
+          description: the ID of the principal for which to get usage informartion
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          description: the maximum number of results to return
+          schema:
+            type: number
+        - in: query
+          name: nextPrincipalId
+          required: false
+          description: the maximum number of results to return
+          schema:
+            type: string
+        - in: query
+          name: nextStartDate
+          required: false
+          description: the maximum number of results to return
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Success
           headers:
             Access-Control-Allow-Headers:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Methods:
-              type: "string"
+              schema:
+                type: string
             Access-Control-Allow-Origin:
-              type: "string"
-        403:
-          description: "Failed to authenticate request"
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/usage"
+        "400":
+          description: Request validation error.
+        "403":
+          description: Failed to authenticate request
+        "500":
+          description: Server error
       x-amazon-apigateway-integration:
         uri: ${usages_lambda}
-        httpMethod: "POST"
-        type: "aws_proxy"
-        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
       security:
         - sigv4: []
-securityDefinitions:
-  sigv4:
-    type: "apiKey"
-    name: "Authorization"
-    in: "header"
-    x-amazon-apigateway-authtype: "awsSigv4"
-definitions:
-  lease:
-    description: "Lease Details"
-    type: object
-    properties:
-      id:
-        type: string
-        description: Lease ID
-      principalId:
-        type: string
-        description: principalId of the lease to get
-      accountId:
-        type: string
-        description: accountId of the AWS account
-      leaseStatus:
-        $ref: "#/definitions/leaseStatus"
-      leaseStatusReason:
-        $ref: "#/definitions/leaseStatusReason"
-      createdOn:
-        type: number
-        description: creation date in epoch seconds
-      lastModifiedOn:
-        type: number
-        description: date last modified in epoch seconds
-      budgetAmount:
-        type: number
-        description: budget amount
-      budgetCurrency:
-        type: string
-        description: budget currency
-      budgetNotificationEmails:
-        type: array
-        items:
+components:
+  securitySchemes:
+    sigv4:
+      type: apiKey
+      name: Authorization
+      in: header
+      x-amazon-apigateway-authtype: awsSigv4
+  schemas:
+    lease:
+      description: Lease Details
+      type: object
+      properties:
+        id:
           type: string
-        description: budget notification emails
-      leaseStatusModifiedOn:
-        type: number
-        description: date lease status was last modified in epoch seconds
-      expiresOn:
-        type: number
-        description: date lease should expire in epoch seconds
-  leaseAuth:
-    description: "Lease Authentication"
-    type: object
-    properties:
-      accessKeyId:
-        type: string
-        description: Access Key ID for access to the AWS API
-      secretAccessKey:
-        type: string
-        description: Secret Access Key for access to the AWS API
-      sessionToken:
-        type: string
-        description: Session Token for access to the AWS API
-      consoleUrl:
-        type: string
-        description: URL to access the AWS Console
-  account:
-    description: "Account Details"
-    type: object
-    properties:
-      id:
-        type: string
-        description: AWS Account ID
-      accountStatus:
-        $ref: "#/definitions/accountStatus"
-      adminRoleArn:
-        type: string
-        description: ARN for an IAM role within this AWS account. The DCE master account will assume this IAM role to execute operations within this AWS account. This IAM role is configured by the client, and must be configured with [a Trust Relationship with the DCE master account.](/https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html)
-      principalRoleArn:
-        type: string
-        description: ARN for an IAM role within this AWS account. This role is created by the DCE master account, and may be assumed by principals to login to their AWS child account.
-      principalPolicyHash:
-        type: string
-        description: The S3 object ETag used to apply the Principal IAM Policy within this AWS account.  This policy is created by the DCE master account, and is assumed by people with access to principalRoleArn.
-      lastModifiedOn:
-        type: integer
-        description: Epoch timestamp, when account record was last modified
-      createdOn:
-        type: integer
-        description: Epoch timestamp, when account record was created
-      metadata:
-        type: object
-        description: Any organization specific data pertaining to the account that needs to be persisted
-  accountStatus:
-    type: string
-    enum: ["Ready", "NotReady", "Leased", "Orphaned"]
-    description: |
-      Status of the Account.
-      "Ready": The account is clean and ready for lease
-      "NotReady": The account is in "dirty" state, and needs to be reset before it may be leased.
-      "Leased": The account is leased to a principal
-  leaseStatus:
-    type: string
-    enum: ["Active", "Inactive"]
-    description: |
-      Status of the Lease.
-      "Active": The principal is leased and has access to the account
-      "Inactive": The lease has become inactive, either through expiring, exceeding budget, or by request.
-  leaseStatusReason:
-    type: string
-    enum:
-      - "LeaseExpired"
-      - "LeaseOverBudget"
-      - "LeaseDestroyed"
-      - "LeaseActive"
-      - "LeaseRolledBack"
-    description: |
-      A reason behind the lease status.
-      "LeaseExpired": The lease exceeded its expiration time ("expiresOn") and
-      the associated account was reset and returned to the account pool.
-      "LeaseOverBudget": The lease exceeded its budgeted amount and the
-      associated account was reset and returned to the account pool.
-      "LeaseDestroyed": The lease was adminstratively ended, which can be done
-      via the leases API.
-      "LeaseActive": The lease is active.
-      "LeaseRolledBack": A system error occurred while provisioning the lease.
-      and it was rolled back.
-  usage:
-    description: "usage cost of the aws account from start date to end date"
-    type: object
-    properties:
-      principalId:
-        type: string
-        description: >
-          principalId of the user who owns the lease of the AWS account
-      accountId:
-        type: string
-        description: accountId of the AWS account
-      startDate:
-        type: number
-        description: usage start date as Epoch Timestamp
-      endDate:
-        type: number
-        description: usage end date as Epoch Timestamp
-      costAmount:
-        type: number
-        description: usage cost Amount of AWS account for given period
-      costCurrency:
-        type: string
-        description: usage cost currency
-      timeToLive:
-        type: number
-        description: ttl attribute as Epoch Timestamp
+          description: Lease ID
+        principalId:
+          type: string
+          description: principalId of the lease to get
+        accountId:
+          type: string
+          description: accountId of the AWS account
+        leaseStatus:
+          $ref: "#/components/schemas/leaseStatus"
+        leaseStatusReason:
+          $ref: "#/components/schemas/leaseStatusReason"
+        createdOn:
+          type: number
+          description: creation date in epoch seconds
+        lastModifiedOn:
+          type: number
+          description: date last modified in epoch seconds
+        budgetAmount:
+          type: number
+          description: budget amount
+        budgetCurrency:
+          type: string
+          description: budget currency
+        budgetNotificationEmails:
+          type: array
+          items:
+            type: string
+          description: budget notification emails
+        leaseStatusModifiedOn:
+          type: number
+          description: date lease status was last modified in epoch seconds
+        expiresOn:
+          type: number
+          description: date lease should expire in epoch seconds
+    leaseAuth:
+      description: Lease Authentication
+      type: object
+      properties:
+        accessKeyId:
+          type: string
+          description: Access Key ID for access to the AWS API
+        secretAccessKey:
+          type: string
+          description: Secret Access Key for access to the AWS API
+        sessionToken:
+          type: string
+          description: Session Token for access to the AWS API
+        consoleUrl:
+          type: string
+          description: URL to access the AWS Console
+    account:
+      description: Account Details
+      type: object
+      properties:
+        id:
+          type: string
+          description: AWS Account ID
+        accountStatus:
+          $ref: "#/components/schemas/accountStatus"
+        adminRoleArn:
+          type: string
+          description: ARN for an IAM role within this AWS account. The DCE master account
+            will assume this IAM role to execute operations within this AWS
+            account. This IAM role is configured by the client, and must be
+            configured with [a Trust Relationship with the DCE master
+            account.](/https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html)
+        principalRoleArn:
+          type: string
+          description: ARN for an IAM role within this AWS account. This role is created by
+            the DCE master account, and may be assumed by principals to login to
+            their AWS child account.
+        principalPolicyHash:
+          type: string
+          description: The S3 object ETag used to apply the Principal IAM Policy within
+            this AWS account.  This policy is created by the DCE master account,
+            and is assumed by people with access to principalRoleArn.
+        lastModifiedOn:
+          type: integer
+          description: Epoch timestamp, when account record was last modified
+        createdOn:
+          type: integer
+          description: Epoch timestamp, when account record was created
+        metadata:
+          type: object
+          description: Any organization specific data pertaining to the account that needs
+            to be persisted
+    accountStatus:
+      type: string
+      enum:
+        - Ready
+        - NotReady
+        - Leased
+        - Orphaned
+      description: >
+        Status of the Account.
+
+        "Ready": The account is clean and ready for lease
+
+        "NotReady": The account is in "dirty" state, and needs to be reset before it may be leased.
+
+        "Leased": The account is leased to a principal
+    leaseStatus:
+      type: string
+      enum:
+        - Active
+        - Inactive
+      description: >
+        Status of the Lease.
+
+        "Active": The principal is leased and has access to the account
+
+        "Inactive": The lease has become inactive, either through expiring, exceeding budget, or by request.
+    leaseStatusReason:
+      type: string
+      enum:
+        - LeaseExpired
+        - LeaseOverBudget
+        - LeaseDestroyed
+        - LeaseActive
+        - LeaseRolledBack
+      description: |
+        A reason behind the lease status.
+        "LeaseExpired": The lease exceeded its expiration time ("expiresOn") and
+        the associated account was reset and returned to the account pool.
+        "LeaseOverBudget": The lease exceeded its budgeted amount and the
+        associated account was reset and returned to the account pool.
+        "LeaseDestroyed": The lease was adminstratively ended, which can be done
+        via the leases API.
+        "LeaseActive": The lease is active.
+        "LeaseRolledBack": A system error occurred while provisioning the lease.
+        and it was rolled back.
+    usage:
+      description: usage cost of the aws account from start date to end date
+      type: object
+      properties:
+        principalId:
+          type: string
+          description: |
+            principalId of the user who owns the lease of the AWS account
+        accountId:
+          type: string
+          description: accountId of the AWS account
+        startDate:
+          type: number
+          description: usage start date as Epoch Timestamp
+        endDate:
+          type: number
+          description: usage end date as Epoch Timestamp
+        costAmount:
+          type: number
+          description: usage cost Amount of AWS account for given period
+        costCurrency:
+          type: string
+          description: usage cost currency
+        timeToLive:
+          type: number
+          description: ttl attribute as Epoch Timestamp
