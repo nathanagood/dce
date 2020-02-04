@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"encoding/json"
+
 	"github.com/Optum/dce/pkg/shell"
 	"github.com/pkg/errors"
 )
@@ -70,7 +71,6 @@ func (tf *Terraform) InitAndApply(input *InitAndApplyInput) error {
 		return err
 	}
 
-	// Terraform apply
 	_, err = shell.Exec(&shell.ExecInput{
 		Name: tf.bin(),
 		Args: append([]string{

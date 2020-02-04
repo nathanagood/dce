@@ -2,11 +2,14 @@ package apitests
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/pkg/errors"
 
 	acct "github.com/Optum/dce/pkg/account"
 	db "github.com/Optum/dce/pkg/data"
@@ -25,7 +28,12 @@ const (
 	// leasesJSONFile  string = "leases.json"
 )
 
+// FuncTest contains the settings that are used in
+// the tests. The schema keys need to be identical
+// to the names of the terraform output variables
+// that you want to use
 type FuncTest struct {
+	awsSession   *session.Session
 	APIURL       string `schema:"api_url"`
 	Region       string `schema:"aws_region"`
 	AccountTable string `schema:"accounts_table_name"`
@@ -33,27 +41,107 @@ type FuncTest struct {
 
 var f *FuncTest
 
+type setupFunc func() (string, error)
+
+type setupHandler struct {
+	handlers []setupFunc
+	// errors   []error
+}
+
+func (s *setupHandler) and(step setupFunc) *setupHandler {
+	s.handlers = append(s.handlers, step)
+	return s
+}
+
+func (s *setupHandler) begin() error {
+	for _, f := range s.handlers {
+		name, err := f()
+		if err != nil {
+			// Stop execution here
+			return errors.Wrapf(err, "error while trying to perform step %q", name)
+		}
+	}
+	return nil
+}
+
+func with(step setupFunc) *setupHandler {
+	handlers := []setupFunc{step}
+	handler := setupHandler{
+		handlers: handlers,
+	}
+	return &handler
+}
+
+// setup configures the things before the tests.
+func setup(m *testing.M) {
+	f = new(FuncTest)
+
+	err := with(f.TerraformOutputs).
+		and(f.NewAWSSession).
+		and(f.AccountData).
+		and(f.LeaseData).
+		and(f.CognitoUsers).
+		and(f.IAMUsers).
+		begin()
+
+	if err != nil {
+		log.Fatalf("error setting up tests: %v", err)
+	}
+}
+
+// Teardown
+func teardown(m *testing.M) {
+	// Delete the table data...
+
+}
+
 func TestMain(m *testing.M) {
-	Setup(m)
-	defer Teardown(m)
+	setup(m)
+	defer teardown(m)
 	code := m.Run()
 	os.Exit(code)
 }
 
-// Setup
-func Setup(m *testing.M) {
-	// Create the database client..
-	f = new(FuncTest)
+func (funcT *FuncTest) RunWithAccountData(t *testing.T, f func(t *testing.T)) func(t *testing.T) {
+	t.Logf("Using settings: %v", funcT)
+	return f
+}
 
-	t := &tf.Terraform{
+func (funcT *FuncTest) NewAWSSession() (name string, err error) {
+	name = "create new AWS session"
+	err = nil
+	sess, err := session.NewSession()
+	if err != nil || sess == nil {
+		err = errors.Wrapf(err, "Error whilst creating new AWS session: %v", err)
+		return
+	}
+	funcT.awsSession = sess
+	return
+}
+
+func (funcT *FuncTest) TerraformOutputs() (name string, err error) {
+	name = "load terraform outputs"
+	err = nil
+
+	terraform := &tf.Terraform{
 		ModuleDir:       "../../../modules",
 		TerraformBinary: "terraform",
 	}
 	// Go get the Terraform variables, just once...
-	tfOuts, err := t.Output()
+	tfOuts, err := terraform.Output()
 
 	if err != nil {
-		log.Fatalf("Error while getting TF output vars: %s", err.Error())
+		err = errors.Wrapf(err, "error while getting TF output vars: %s", err.Error())
+		return
+	}
+
+	// We are definitely expecting some outputs here because
+	// we control this. There should be at least AWS region,
+	// the API URL, etc., so make sure to error if we didn't
+	// get anything
+	if len(tfOuts) == 0 {
+		err = fmt.Errorf("unexpected zero-length output from terraform output")
+		return
 	}
 
 	decoder := schema.NewDecoder()
@@ -61,66 +149,73 @@ func Setup(m *testing.M) {
 	err = decoder.Decode(f, toSchema(tfOuts))
 
 	if err != nil {
-		log.Fatalf("error initializing tests: %s", err.Error())
+		err = errors.Wrapf(err, "error while trying to decode output map: %q", err)
 	}
+
+	return
 }
 
-// Teardown
-func Teardown(m *testing.M) {
-	// Delete the table data...
-
-}
-
-func (funcT *FuncTest) RunWithAccountData(t *testing.T, f func(t *testing.T)) func(t *testing.T) {
-
-	t.Logf("Using settings: %v", funcT)
-
-	AWSSession, err := session.NewSession()
-	if err != nil || AWSSession == nil {
-		log.Fatalf("Error whilst creating new AWS session: %v", err)
-	}
+func (funcT *FuncTest) AccountData() (name string, err error) {
+	name = "load account data"
 
 	dbClient := dynamodb.New(
-		AWSSession,
+		funcT.awsSession,
 		aws.NewConfig().WithRegion(funcT.Region),
 	)
+
+	var accounts = new([]acct.Account)
+	file := filepath.Join(defaultDataDir, accountJSONFile)
+
+	loadFromFile(file, &accounts)
 
 	accountSvc := db.Account{
 		DynamoDB:  dbClient,
 		TableName: funcT.AccountTable,
 	}
-
-	// Bulk load the accounts from the file...
-	jsonFile := filepath.Join(defaultDataDir, accountJSONFile)
-	file, err := os.Open(jsonFile)
-	if err != nil {
-		log.Fatalf("Error opening file: %s", err.Error())
-	}
-	bytes, _ := ioutil.ReadAll(file)
-	var accounts []*acct.Account
-
-	err = json.Unmarshal(bytes, &accounts)
-
-	if err != nil {
-		t.Fatalf("Error while unmarshaling JSON file: %s", err.Error())
-	}
-
-	for _, a := range accounts {
-		if err = accountSvc.Write(a, nil); err != nil {
-			t.Fatalf("error while trying to add account %v: %v", a, err.Error())
+	for _, a := range *accounts {
+		if e := accountSvc.Write(&a, nil); e != nil {
+			err = errors.Wrapf(err, "error while trying to add account %v: %v", a, err.Error())
+			return
 		}
 	}
 
-	return f
+	return
 }
 
-// func loadIntoDDB(db dynamodbiface.DynamoDBAPI, inTable string, fromFile string, obj interface{}) error {
-// 	// First load the objects from the file...
+func (funcT *FuncTest) LeaseData() (name string, err error) {
+	name = "load lease data"
+	err = nil
+	return
+}
 
-// 	// Then insert them into the database...
+func (funcT *FuncTest) CognitoUsers() (name string, err error) {
+	name = "load lease data"
+	err = nil
+	return
+}
 
-// 	return nil
-// }
+func (funcT *FuncTest) IAMUsers() (name string, err error) {
+	name = "load lease data"
+	err = nil
+	return
+}
+
+func loadFromFile(fromFile string, into interface{}) {
+	// First load the objects from the file...
+	// jsonFile := filepath.Join(defaultDataDir, fromFile)
+	file, err := os.Open(fromFile)
+
+	if err != nil {
+		log.Fatalf("error opening file: %s", err.Error())
+	}
+
+	bytes, _ := ioutil.ReadAll(file)
+	err = json.Unmarshal(bytes, into)
+
+	if err != nil {
+		log.Fatalf("error while unmarshaling JSON file: %s", err.Error())
+	}
+}
 
 func toSchema(in map[string]string) map[string][]string {
 	out := make(map[string][]string, len(in))
