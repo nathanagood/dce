@@ -32,10 +32,16 @@ func main() {
 	for path, api := range swagger.Paths {
 		givens := []Given{}
 		res, err := ParseResourceName(path)
+
 		if err != nil {
-			log.Panicf("Error: %s", err.Error())
+			log.Panicf("error parsing resource name: %s", err.Error())
 		}
+
 		fileName, err := ToTestFileName(res)
+
+		if err != nil {
+			log.Panicf("error building test name: %s", err.Error())
+		}
 
 		log.Printf("Creating tests for in file %s path: %s", fileName, path)
 		testName, _ := ToTestName(res)

@@ -2,11 +2,12 @@ package apitests
 
 import (
 	"testing"
+	// "github.com/stretchr/testify/assert"
 )
 
 func TestAccountsAPI(t *testing.T) {
 
-	t.Run("GIVEN the accounts endpoint", func(t *testing.T) {
+	t.Run("GIVEN the accounts endpoint", f.RunWithAccountData(t, func(t *testing.T) {
 
 		t.Run("WHEN an HTTP GET request is sent to /accounts with the status query parameter", func(t *testing.T) {
 
@@ -104,8 +105,7 @@ func TestAccountsAPI(t *testing.T) {
 
 		})
 
-	})
-
+	}))
 	t.Run("GIVEN the accounts endpoint", func(t *testing.T) {
 
 		t.Run("WHEN an HTTP DELETE request is sent to /accounts/{accountId}", func(t *testing.T) {

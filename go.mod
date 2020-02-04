@@ -17,17 +17,15 @@ require (
 	github.com/gorilla/mux v1.7.3
 	github.com/gorilla/schema v1.1.0
 	github.com/gruntwork-io/terratest v0.15.13
+	github.com/hashicorp/terraform v0.12.20
 	github.com/mattn/go-isatty v0.0.7 // indirect
+	github.com/mitchellh/cli v1.0.0
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/oleiade/reflections v1.0.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/pquerna/otp v1.2.0 // indirect
 	github.com/rebuy-de/aws-nuke v2.11.0+incompatible
 	github.com/stretchr/testify v1.4.0
-	golang.org/x/crypto v0.0.0-20190418165655-df01cb2cc480 // indirect
-	golang.org/x/net v0.0.0-20190628185345-da137c7871d7 // indirect
-	golang.org/x/text v0.3.2 // indirect
-	google.golang.org/appengine v1.4.0 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gopkg.in/oleiade/reflections.v1 v1.0.0

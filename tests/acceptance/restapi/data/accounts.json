@@ -1,0 +1,9 @@
+[
+    {
+        "id": "123456789012",
+        "accountStatus": "NotReady",
+        "adminRoleArn": "arn:aws:iam::123456789012:role/dce-admin-functest",
+        "principalRoleArn": "arn:aws:iam::123456789012:role/Principal",
+        "principalPolicyHash": "37db022925968a64669ee8ff09c1228b"
+    }
+]
