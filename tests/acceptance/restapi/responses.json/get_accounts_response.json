@@ -1,0 +1,13 @@
+{
+    "statusCode": 200,
+    "headers": null,
+    "multiValueHeaders": {
+        "Access-Control-Allow-Origin": [
+            "*"
+        ],
+        "Content-Type": [
+            "application/json"
+        ]
+    },
+    "body": "[{\"id\":\"123456789012\",\"accountStatus\":\"NotReady\",\"adminRoleArn\":\"arn:aws:iam::123456789012:role/dce-admin-functest\",\"principalRoleArn\":\"arn:aws:iam::123456789012:role/Principal\",\"principalPolicyHash\":\"37db022925968a64669ee8ff09c1228b\"}]\n"
+}

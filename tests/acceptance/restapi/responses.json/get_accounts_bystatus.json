@@ -1,0 +1,13 @@
+{
+    "statusCode": 200,
+    "headers": null,
+    "multiValueHeaders": {
+        "Access-Control-Allow-Origin": [
+            "*"
+        ],
+        "Content-Type": [
+            "application/json"
+        ]
+    },
+    "body": "[]\n"
+}

@@ -76,12 +76,15 @@ func with(step setupFunc) *setupHandler {
 func setup(m *testing.M) {
 	f = new(FuncTest)
 
-	err := with(f.TerraformOutputs).
-		and(f.NewAWSSession).
-		and(f.AccountData).
+	// err := with(f.TerraformOutputs).
+	// 	and(f.NewAWSSession).
+	// 	and(f.AccountData).
+	// 	and(f.LeaseData).
+	// 	and(f.CognitoUsers).
+	// 	and(f.IAMUsers).
+	// 	begin()
+	err := with(f.IAMUsers).
 		and(f.LeaseData).
-		and(f.CognitoUsers).
-		and(f.IAMUsers).
 		begin()
 
 	if err != nil {
@@ -189,13 +192,13 @@ func (funcT *FuncTest) LeaseData() (name string, err error) {
 }
 
 func (funcT *FuncTest) CognitoUsers() (name string, err error) {
-	name = "load lease data"
+	name = "load Cognito users"
 	err = nil
 	return
 }
 
 func (funcT *FuncTest) IAMUsers() (name string, err error) {
-	name = "load lease data"
+	name = "initialize IAM users"
 	err = nil
 	return
 }

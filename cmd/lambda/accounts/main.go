@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -137,6 +139,25 @@ func initConfig() {
 // Handler - Handle the lambda function
 func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 
+	// log out the context and the request
+	s := ""
+	w := bytes.NewBufferString(s)
+
+	if err := api.WriteContext(ctx, w); err != nil {
+		errResp := events.APIGatewayProxyResponse{}
+		return errResp, err
+	}
+
+	log.Printf("context is: %v", w.String())
+
+	eventJSON, err := json.Marshal(req)
+
+	if err != nil {
+		log.Printf("error while trying to marshal event to JSON: %v", err)
+	}
+
+	log.Printf("event is: %s", string(eventJSON))
+
 	// Set baseRequest information lost by integration with gorilla mux
 	baseRequest = url.URL{}
 	baseRequest.Scheme = req.Headers["X-Forwarded-Proto"]
@@ -144,7 +165,12 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 	baseRequest.Path = fmt.Sprintf("%s%s", req.RequestContext.Stage, req.Path)
 
 	// If no name is provided in the HTTP request body, throw an error
-	return muxLambda.ProxyWithContext(ctx, req)
+	resp, err := muxLambda.ProxyWithContext(ctx, req)
+
+	respJSON, _ := json.Marshal(resp)
+	log.Printf("response is: %s", string(respJSON))
+
+	return resp, err
 }
 
 func main() {
