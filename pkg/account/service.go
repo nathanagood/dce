@@ -1,11 +1,13 @@
 package account
 
 import (
+	"log"
 	"time"
 
 	"github.com/Optum/dce/pkg/arn"
 	"github.com/Optum/dce/pkg/errors"
 	validation "github.com/go-ozzo/ozzo-validation"
+	"github.com/imdario/mergo"
 )
 
 // Writer put an item into the data store
@@ -58,6 +60,7 @@ type Eventer interface {
 type Manager interface {
 	ValidateAccess(role *arn.ARN) error
 	UpsertPrincipalAccess(account *Account) error
+	DeletePrincipalAccess(account *Account) error
 }
 
 // Service is a type corresponding to a Account table record
@@ -110,10 +113,7 @@ func (a *Service) Update(ID string, data *Account) (*Account, error) {
 		validation.Field(&data.ID, validation.NilOrNotEmpty, validation.In(ID)),
 		validation.Field(&data.AdminRoleArn, validation.By(isNilOrUsableAdminRole(a.managerSvc))),
 		validation.Field(&data.LastModifiedOn, validation.By(isNil)),
-		validation.Field(&data.Status, validation.By(isNil)),
 		validation.Field(&data.CreatedOn, validation.By(isNil)),
-		validation.Field(&data.PrincipalRoleArn, validation.By(isNil)),
-		validation.Field(&data.PrincipalPolicyHash, validation.By(isNil)),
 	)
 	if err != nil {
 		return nil, errors.NewValidation("account", err)
@@ -124,11 +124,9 @@ func (a *Service) Update(ID string, data *Account) (*Account, error) {
 		return nil, err
 	}
 
-	if data.AdminRoleArn != nil {
-		account.AdminRoleArn = data.AdminRoleArn
-	}
-	if data.Metadata != nil {
-		account.Metadata = data.Metadata
+	err = mergo.Merge(account, *data)
+	if err != nil {
+		return nil, errors.NewInternalServer("unexpected error updating account", err)
 	}
 
 	err = a.Save(account)
@@ -177,7 +175,7 @@ func (a *Service) Create(data *Account) (*Account, error) {
 		return nil, err
 	}
 
-	err = a.managerSvc.UpsertPrincipalAccess(new)
+	err = a.UpsertPrincipalAccess(new)
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +203,8 @@ func (a *Service) Delete(data *Account) error {
 
 	err := validation.ValidateStruct(data,
 		validation.Field(&data.Status, validation.NotNil, validation.By(isAccountNotLeased)),
+		validation.Field(&data.AdminRoleArn, validation.NotNil),
+		validation.Field(&data.PrincipalRoleArn, validation.NotNil),
 	)
 	if err != nil {
 		return errors.NewConflict("account", *data.ID, err)
@@ -215,10 +215,25 @@ func (a *Service) Delete(data *Account) error {
 		return err
 	}
 
+	err = a.managerSvc.DeletePrincipalAccess(data)
+	if err != nil {
+		return err
+	}
+
+	err = a.eventSvc.AccountDelete(data)
+	if err != nil {
+		return err
+	}
+
+	err = a.Reset(data)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// List Get a list of accounts based on Principal ID
+// List Get a list of accounts based on a query
 func (a *Service) List(query *Account) (*Accounts, error) {
 
 	accounts, err := a.dataSvc.List(query)
@@ -227,6 +242,72 @@ func (a *Service) List(query *Account) (*Accounts, error) {
 	}
 
 	return accounts, nil
+}
+
+// ListPages Execute a function per page of accounts
+func (a *Service) ListPages(query *Account, fn func(*Accounts) bool) error {
+
+	for {
+		records, err := a.dataSvc.List(query)
+		if err != nil {
+			return err
+		}
+		if !fn(records) {
+			break
+		}
+		if query.NextID == nil {
+			break
+		}
+	}
+
+	return nil
+}
+
+// Reset initiates the Reset account process.  It will not change the status as there may
+// be many reasons why a reset is called.  Delete, Lease Ending, etc.
+func (a *Service) Reset(data *Account) error {
+	err := validation.ValidateStruct(data,
+		validation.Field(&data.Status, validation.NotNil, validation.By(isAccountNotLeased)),
+		validation.Field(&data.AdminRoleArn, validation.NotNil),
+		validation.Field(&data.PrincipalRoleArn, validation.NotNil),
+	)
+	if err != nil {
+		return errors.NewConflict("account", *data.ID, err)
+	}
+
+	err = a.eventSvc.AccountReset(data)
+	if err != nil {
+		return err
+	}
+	log.Printf("Added account %q to Reset Queue\n", *data.ID)
+
+	return nil
+}
+
+// UpsertPrincipalAccess merges principal access to make sure its in sync with expectations
+func (a *Service) UpsertPrincipalAccess(data *Account) error {
+	err := validation.ValidateStruct(data,
+		validation.Field(&data.AdminRoleArn, validation.NotNil),
+		validation.Field(&data.PrincipalRoleArn, validation.NotNil),
+	)
+	if err != nil {
+		return errors.NewConflict("account", *data.ID, err)
+	}
+
+	oldHash := data.PrincipalPolicyHash
+
+	err = a.managerSvc.UpsertPrincipalAccess(data)
+	if err != nil {
+		return err
+	}
+	if oldHash != data.PrincipalPolicyHash {
+		err = a.Save(data)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // NewServiceInput Input for creating a new Service
